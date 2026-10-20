@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: nova-chat
+    runtime: node
+    plan: free
+    buildCommand: echo "no build needed"
+    startCommand: node server.js
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
