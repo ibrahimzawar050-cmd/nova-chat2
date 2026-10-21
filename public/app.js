@@ -17,11 +17,12 @@ const SUGGESTIONS = [
 let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 // Saves to the browser (local mode) or to the user's cloud account (login mode).
+const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m; // never store the picture bytes
 const save = c => {
   if (guest) return; // guests: nothing is saved
-  if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats)); } catch {} return; }
+  if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats.map(x => ({ ...x, messages: x.messages.map(strip) })))); } catch {} return; }
   c = c || chat();
-  if (c && c.messages.length) sb.from('chats').upsert({ id: c.id, title: c.title, messages: c.messages, updated: c.updated })
+  if (c && c.messages.length) sb.from('chats').upsert({ id: c.id, title: c.title, messages: c.messages.map(strip), updated: c.updated })
     .then(({ error }) => { if (error) { console.error(error); if (!warned) { warned = true; alert('Could not save your chat online: ' + error.message); } } });
 };
 const chat = () => chats.find(c => c.id === cur);
@@ -111,6 +112,7 @@ function renderChat() {
   if (!c || !c.messages.length) {
     box.innerHTML = `<div class="welcome"><span class="logo"></span><h1>Hi, I'm Nova</h1><p>Ask me anything — maths, science, code, football, games, writing and more.</p><div class="sug"></div></div>`;
     SUGGESTIONS.forEach(([t, s]) => {
+      if (guest && t === 'Create an image') return; // images are for logged-in users only
       const b = document.createElement('button'); b.innerHTML = `<b>${esc(t)}</b><small>${esc(s)}</small>`;
       b.onclick = () => t === 'Create an image' ? makeImage(s) : send(t + (s.startsWith('"') ? ': ' + s : ' — ' + s));
       box.querySelector('.sug').appendChild(b);
@@ -211,7 +213,7 @@ $('#msgs').addEventListener('click', e => {
   const ib = e.target.closest('.imgre, .imgdl');
   if (ib) {
     const el = ib.closest('.msg'), m = chat().messages[el.dataset.i];
-    if (ib.classList.contains('imgre')) { m.image.seed = Math.floor(Math.random() * 1e6); save(chat()); fillImage(el, m); }
+    if (ib.classList.contains('imgre')) { m.image.seed = Math.floor(Math.random() * 1e6); m.image.data = null; m.image.fresh = true; save(chat()); fillImage(el, m); }
     else downloadImage(m.image);
     return;
   }
@@ -229,7 +231,13 @@ $('#theme').onclick = () => theme(document.documentElement.dataset.theme === 'da
 theme(localStorage.getItem('nova.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
 
 // ---------- Images (free Pollinations service; the browser loads the picture directly) ----------
-let imgMode = false;
+let imgMode = false, useCF = false;
+const GUEST_IMG_MSG = 'Please log in to create images. Guests can chat, but pictures are for people with an account.';
+async function authHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (sb) { const { data } = await sb.auth.getSession(); if (data.session) h.Authorization = 'Bearer ' + data.session.access_token; }
+  return h;
+}
 const imgUrl = i => `https://image.pollinations.ai/prompt/${encodeURIComponent(i.prompt)}?width=1024&height=1024&model=flux&nologo=true&private=true&seed=${i.seed}`;
 function setImgMode(on) {
   imgMode = on; $('#imgbtn').classList.toggle('on', on);
@@ -238,34 +246,50 @@ function setImgMode(on) {
 }
 function makeImage(prompt) {
   prompt = prompt.replace(/^\/image\s+/i, '').trim().slice(0, 500);
+  if (guest) return alert(GUEST_IMG_MSG);
   if (busy || !prompt) return;
   setImgMode(false);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   if (!c.messages.length) c.title = ('🎨 ' + prompt).slice(0, 40);
   c.messages.push({ role: 'user', content: '🎨 Create an image: ' + prompt });
-  c.messages.push({ role: 'assistant', content: `(Nova created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6) } });
+  c.messages.push({ role: 'assistant', content: `(Nova created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6), cf: useCF, fresh: true } });
   c.updated = Date.now(); $('#input').value = ''; autosize();
   save(c); renderList(); renderChat();
 }
-function fillImage(d, m) {
+async function fillImage(d, m) {
   const body = d.querySelector('.body'), acts = d.querySelector('.acts2');
-  body.classList.remove('cur');
-  body.innerHTML = '<div class="imgwrap"><div class="imgload"><div class="dots"><i></i><i></i><i></i></div>Creating your image… this can take up to 30 seconds</div></div>';
-  acts.style.display = 'none';
+  body.classList.remove('cur'); acts.style.display = 'none';
   acts.innerHTML = '<button class="icon imgre" title="Make a new version">🔄 New version</button><button class="icon imgdl" title="Download this image">⬇ Download</button>';
-  const wrap = body.firstChild, img = new Image();
-  img.className = 'genimg'; img.alt = m.image.prompt;
-  img.onload = () => { wrap.innerHTML = ''; wrap.appendChild(img); acts.style.display = ''; };
-  img.onerror = () => { wrap.innerHTML = '<div class="err"><span>⚠️ The free image service did not respond. It may be busy. Please try again in a moment.</span></div>'; acts.style.display = ''; };
-  img.src = imgUrl(m.image);
+  body.innerHTML = '<div class="imgwrap"><div class="imgload"><div class="dots"><i></i><i></i><i></i></div>Creating your image… this can take up to 30 seconds</div></div>';
+  let done = false;
+  const fail = msg => { if (done) return; done = true; body.innerHTML = `<div class="imgwrap"><div class="err"><span>⚠️ ${esc(msg)}</span></div></div>`; acts.style.display = ''; };
+  const show = (src, timer) => {
+    const img = new Image(); img.className = 'genimg'; img.alt = m.image.prompt;
+    img.onload = () => { if (done) return; done = true; clearTimeout(timer); body.innerHTML = '<div class="imgwrap"></div>'; body.firstChild.appendChild(img); acts.style.display = ''; };
+    img.onerror = () => { clearTimeout(timer); fail('The image service did not respond. It may be busy. Please try again in a moment.'); };
+    img.src = src;
+  };
+  if (m.image.cf) { // fast service (Cloudflare) through our own server
+    if (m.image.data) return show(m.image.data);
+    if (!m.image.fresh) return fail('This picture was not saved. Tap "New version" to make it again.');
+    try {
+      const res = await fetch('/api/image', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ prompt: m.image.prompt }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.image) throw new Error(j.error || 'Image service error');
+      m.image.data = 'data:image/jpeg;base64,' + j.image; show(m.image.data);
+    } catch (e) { fail(e instanceof TypeError ? 'Network error. Check your internet connection.' : e.message); }
+  } else { // free fallback (Pollinations): can be slow, so stop waiting after 45 seconds
+    const timer = setTimeout(() => fail('The free image service is too busy right now. Please try again in a minute.'), 45000);
+    show(imgUrl(m.image), timer);
+  }
 }
 function downloadImage(i) {
-  const url = imgUrl(i);
+  const url = i.data || imgUrl(i);
   fetch(url).then(r => r.blob()).then(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'nova-image.jpg'; a.click(); })
     .catch(() => window.open(url, '_blank')); // if the browser blocks the direct download, open it so you can save it
 }
-$('#imgbtn').onclick = () => setImgMode(!imgMode);
+$('#imgbtn').onclick = () => guest ? alert(GUEST_IMG_MSG) : setImgMode(!imgMode);
 
 // ---------- Voice: speech in (mic) and speech out (read aloud) ----------
 const synth = window.speechSynthesis;
@@ -330,6 +354,7 @@ function showAuth(msg, fatal) {
 }
 async function boot() {
   let cfg = {}; try { cfg = await (await fetch('/api/config')).json(); } catch {}
+  useCF = !!cfg.cf;
   if (cfg.supabaseUrl) {
     const wantGuest = sessionStorage.getItem('nova.guest') === '1';
     let session = null;
@@ -348,6 +373,7 @@ async function boot() {
       sb = null; guest = true;
       $('#user').hidden = false; $('#userEmail').textContent = 'Guest · chats are not saved';
       $('#logout').textContent = 'Log in';
+      $('#imgbtn').style.opacity = '.4'; $('#imgbtn').title = 'Log in to create images';
       $('#logout').onclick = () => { sessionStorage.removeItem('nova.guest'); location.reload(); };
     } else return showAuth(window.supabase ? '' : 'Could not load the login library. Check your internet connection, or continue as a guest.', !window.supabase);
   } else { try { chats = JSON.parse(localStorage.getItem('nova.chats') || '[]'); } catch {} }

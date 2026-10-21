@@ -32,6 +32,9 @@ async function authUser(req) { // returns the user id for a valid Supabase login
 }
 const limited = (who, max = 40) => { const now = Date.now(), a = (hits.get(who) || []).filter(x => now - x < 600000); a.push(now); hits.set(who, a); return a.length > max; }; // per 10 minutes: 40 for users, 15 for guests
 const clientIp = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+// Optional faster image service (Cloudflare Workers AI, free daily allowance). Without it, the browser falls back to Pollinations.
+const CF_ID = process.env.CF_ACCOUNT_ID, CF_TOKEN = process.env.CF_API_TOKEN, CF_ON = !!(CF_ID && CF_TOKEN);
+const CF_URL = () => `${(process.env.CF_BASE_URL || 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 const GROQ_URL = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1') + '/chat/completions';
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -49,6 +52,31 @@ function readBody(req, limit = 2e6) {
     req.on('end', () => ok(b));
     req.on('error', fail);
   });
+}
+
+async function image(req, res) {
+  if (!CF_ON) return json(res, 501, { error: 'The image service is not configured.' });
+  let who, max = 10; // images per 10 minutes per logged-in user (guests are not allowed to create images)
+  if (AUTH_ON) {
+    if ((req.headers.authorization || '').startsWith('Bearer ')) {
+      who = await authUser(req);
+      if (!who) return json(res, 401, { error: 'Your login expired. Please refresh the page and log in again.' });
+    } else return json(res, 403, { error: 'Please log in to create images. Guests can chat, but pictures are for people with an account.' });
+  } else who = 'ip:' + clientIp(req);
+  if (limited(who + ':img', max)) return json(res, 429, { error: 'Image limit reached. Please wait a few minutes and try again.' });
+  let prompt;
+  try { prompt = String(JSON.parse(await readBody(req, 20000)).prompt || '').trim().slice(0, 500); if (!prompt) throw 0; }
+  catch { return json(res, 400, { error: 'Please describe the image you want.' }); }
+  try {
+    const r = await fetch(CF_URL(), { method: 'POST', headers: { Authorization: 'Bearer ' + CF_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ prompt, steps: 6 }), signal: AbortSignal.timeout(60000) });
+    const j = await r.json().catch(() => ({}));
+    const img = j.result && j.result.image;
+    if (!r.ok || !img) {
+      const msg = (j.errors && j.errors[0] && j.errors[0].message) || `Image service error (${r.status})`;
+      return json(res, 502, { error: r.status === 429 || /limit|neurons|quota/i.test(msg) ? 'The free daily image allowance is used up. Please try again tomorrow.' : msg });
+    }
+    json(res, 200, { image: img });
+  } catch { json(res, 502, { error: 'The image service did not respond. Please try again.' }); }
 }
 
 async function chat(req, res) {
@@ -131,7 +159,8 @@ async function chat(req, res) {
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (req.method === 'POST' && url.pathname === '/api/chat') return chat(req, res);
-  if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, AUTH_ON ? { supabaseUrl: SB_URL, anonKey: SB_KEY } : {});
+  if (req.method === 'POST' && url.pathname === '/api/image') return image(req, res);
+  if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...(AUTH_ON ? { supabaseUrl: SB_URL, anonKey: SB_KEY } : {}), cf: CF_ON });
   if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
   let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
   if (!file.startsWith(PUBLIC)) return json(res, 403, { error: 'Forbidden' });
@@ -140,4 +169,4 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
     res.end(data);
   });
-}).listen(PORT, () => console.log(`Nova running at http://localhost:${PORT}  (provider: ${PROVIDER || 'NONE'}, model: ${MODEL}, key ${PROVIDER ? 'set' : 'MISSING'}, login ${AUTH_ON ? 'REQUIRED' : 'off'})`));
+}).listen(PORT, () => console.log(`Nova running at http://localhost:${PORT}  (provider: ${PROVIDER || 'NONE'}, model: ${MODEL}, key ${PROVIDER ? 'set' : 'MISSING'}, login ${AUTH_ON ? 'REQUIRED' : 'off'}, fast images ${CF_ON ? 'on' : 'off'})`));

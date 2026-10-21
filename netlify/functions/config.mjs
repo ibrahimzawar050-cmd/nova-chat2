@@ -2,6 +2,7 @@
 const env = k => (globalThis.Netlify ? Netlify.env.get(k) : process.env[k]);
 export default async () => {
   const url = (env('SUPABASE_URL') || '').replace(/\/$/, ''), key = env('SUPABASE_ANON_KEY') || '';
-  return new Response(JSON.stringify(url && key ? { supabaseUrl: url, anonKey: key } : {}), { headers: { 'content-type': 'application/json' } });
+  const cf = !!(env('CF_ACCOUNT_ID') && env('CF_API_TOKEN'));
+  return new Response(JSON.stringify({ ...(url && key ? { supabaseUrl: url, anonKey: key } : {}), cf }), { headers: { 'content-type': 'application/json' } });
 };
 export const config = { path: '/api/config' };
