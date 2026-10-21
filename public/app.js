@@ -11,7 +11,7 @@ const ICON = {
 const SUGGESTIONS = [
   ['Explain black holes', 'in simple language'], ['Make me a game', 'a small one in HTML & JavaScript'],
   ['Explain the offside rule', 'with football examples'], ['Help me with maths', 'solve 3x + 7 = 22 step by step'],
-  ['Translate to Spanish', '"Where is the train station?"'], ['Write a short story', 'about a robot who loves gardening']
+  ['Translate to Spanish', '"Where is the train station?"'], ['Create an image', 'a cat astronaut on the moon']
 ];
 
 let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
@@ -88,7 +88,7 @@ function msgEl(m, i) {
     if (m.file) d.firstChild.insertAdjacentHTML('afterbegin', `<div class="file">📎 ${esc(m.file.name)}</div>`);
   } else {
     d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button></div></div>`;
-    fillAI(d, m, false);
+    m.image ? fillImage(d, m) : fillAI(d, m, false);
   }
   return d;
 }
@@ -112,7 +112,7 @@ function renderChat() {
     box.innerHTML = `<div class="welcome"><span class="logo"></span><h1>Hi, I'm Nova</h1><p>Ask me anything — maths, science, code, football, games, writing and more.</p><div class="sug"></div></div>`;
     SUGGESTIONS.forEach(([t, s]) => {
       const b = document.createElement('button'); b.innerHTML = `<b>${esc(t)}</b><small>${esc(s)}</small>`;
-      b.onclick = () => send(t + (s.startsWith('"') ? ': ' + s : ' — ' + s));
+      b.onclick = () => t === 'Create an image' ? makeImage(s) : send(t + (s.startsWith('"') ? ': ' + s : ' — ' + s));
       box.querySelector('.sug').appendChild(b);
     });
   } else c.messages.forEach((m, i) => box.appendChild(msgEl(m, i)));
@@ -139,6 +139,7 @@ function setBusy(b) {
 async function send(text) {
   text = (text ?? $('#input').value).trim();
   if (busy || (!text && !file)) return;
+  if (!file && (imgMode || /^\/image\s+/i.test(text))) return makeImage(text);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   const m = { role: 'user', content: text || 'Please look at the attached file.' };
@@ -207,6 +208,13 @@ $('#file').onchange = async e => {
   autosize(); $('#input').focus();
 };
 $('#msgs').addEventListener('click', e => {
+  const ib = e.target.closest('.imgre, .imgdl');
+  if (ib) {
+    const el = ib.closest('.msg'), m = chat().messages[el.dataset.i];
+    if (ib.classList.contains('imgre')) { m.image.seed = Math.floor(Math.random() * 1e6); save(chat()); fillImage(el, m); }
+    else downloadImage(m.image);
+    return;
+  }
   const flash = (b, t) => { const o = b.innerHTML; b.textContent = t; setTimeout(() => b.innerHTML = o, 1200); };
   const cc = e.target.closest('.cc'), cp = e.target.closest('.cp'), rd = e.target.closest('.rd');
   if (rd) { if (rdBtn === rd) stopSpeaking(); else speak(chat().messages[rd.closest('.msg').dataset.i].content, rd); }
@@ -219,6 +227,45 @@ $('#menu').onclick = openSide; $('#scrim').onclick = closeSide;
 function theme(t) { document.documentElement.dataset.theme = t; localStorage.setItem('nova.theme', t); $('#themeLabel').textContent = t === 'dark' ? 'Light mode' : 'Dark mode'; }
 $('#theme').onclick = () => theme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 theme(localStorage.getItem('nova.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+
+// ---------- Images (free Pollinations service; the browser loads the picture directly) ----------
+let imgMode = false;
+const imgUrl = i => `https://image.pollinations.ai/prompt/${encodeURIComponent(i.prompt)}?width=1024&height=1024&model=flux&nologo=true&private=true&seed=${i.seed}`;
+function setImgMode(on) {
+  imgMode = on; $('#imgbtn').classList.toggle('on', on);
+  $('#input').placeholder = on ? 'Describe the image you want…' : 'Message Nova…';
+  if (on) $('#input').focus();
+}
+function makeImage(prompt) {
+  prompt = prompt.replace(/^\/image\s+/i, '').trim().slice(0, 500);
+  if (busy || !prompt) return;
+  setImgMode(false);
+  let c = chat();
+  if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
+  if (!c.messages.length) c.title = ('🎨 ' + prompt).slice(0, 40);
+  c.messages.push({ role: 'user', content: '🎨 Create an image: ' + prompt });
+  c.messages.push({ role: 'assistant', content: `(Nova created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6) } });
+  c.updated = Date.now(); $('#input').value = ''; autosize();
+  save(c); renderList(); renderChat();
+}
+function fillImage(d, m) {
+  const body = d.querySelector('.body'), acts = d.querySelector('.acts2');
+  body.classList.remove('cur');
+  body.innerHTML = '<div class="imgwrap"><div class="imgload"><div class="dots"><i></i><i></i><i></i></div>Creating your image… this can take up to 30 seconds</div></div>';
+  acts.style.display = 'none';
+  acts.innerHTML = '<button class="icon imgre" title="Make a new version">🔄 New version</button><button class="icon imgdl" title="Download this image">⬇ Download</button>';
+  const wrap = body.firstChild, img = new Image();
+  img.className = 'genimg'; img.alt = m.image.prompt;
+  img.onload = () => { wrap.innerHTML = ''; wrap.appendChild(img); acts.style.display = ''; };
+  img.onerror = () => { wrap.innerHTML = '<div class="err"><span>⚠️ The free image service did not respond. It may be busy. Please try again in a moment.</span></div>'; acts.style.display = ''; };
+  img.src = imgUrl(m.image);
+}
+function downloadImage(i) {
+  const url = imgUrl(i);
+  fetch(url).then(r => r.blob()).then(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'nova-image.jpg'; a.click(); })
+    .catch(() => window.open(url, '_blank')); // if the browser blocks the direct download, open it so you can save it
+}
+$('#imgbtn').onclick = () => setImgMode(!imgMode);
 
 // ---------- Voice: speech in (mic) and speech out (read aloud) ----------
 const synth = window.speechSynthesis;

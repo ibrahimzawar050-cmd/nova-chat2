@@ -98,3 +98,9 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 
 .gnote{color:var(--mute);font-size:12px}
 .auth #gu{margin-top:4px}
+
+#imgbtn.on{background:#7c5cff26;color:var(--accent)}
+.imgwrap{margin:4px 0}
+.genimg{display:block;width:min(100%,420px);height:auto;border-radius:16px;border:1px solid var(--line);animation:in .4s}
+.imgload{display:flex;align-items:center;justify-content:center;gap:10px;flex-direction:column;width:min(100%,420px);aspect-ratio:1/1;border:1px dashed var(--line);border-radius:16px;color:var(--mute);text-align:center;padding:20px;font-size:14px}
+.acts2 .icon{font-size:13px;gap:6px}
