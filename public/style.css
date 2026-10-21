@@ -94,3 +94,7 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 .aerr{color:#ff8097;min-height:1.3em;font-size:13px}
 .userbox{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;font-size:13px;color:var(--mute);border-top:1px solid var(--line)}
 #userEmail{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+.gnote{color:var(--mute);font-size:12px}
+.auth #gu{margin-top:4px}

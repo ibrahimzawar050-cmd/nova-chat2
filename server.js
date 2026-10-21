@@ -30,7 +30,8 @@ async function authUser(req) { // returns the user id for a valid Supabase login
     tokens.set(t, { uid: u.id, exp: Date.now() + 60000 }); return u.id;
   } catch { return null; }
 }
-const limited = uid => { const now = Date.now(), a = (hits.get(uid) || []).filter(x => now - x < 600000); a.push(now); hits.set(uid, a); return a.length > 40; }; // 40 msgs / 10 min / user
+const limited = (who, max = 40) => { const now = Date.now(), a = (hits.get(who) || []).filter(x => now - x < 600000); a.push(now); hits.set(who, a); return a.length > max; }; // per 10 minutes: 40 for users, 15 for guests
+const clientIp = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
 const GROQ_URL = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1') + '/chat/completions';
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -53,9 +54,12 @@ function readBody(req, limit = 2e6) {
 async function chat(req, res) {
   if (!PROVIDER) return json(res, 500, { error: 'The server has no API key configured. Add GROQ_API_KEY (free) to the .env file. See the README.' });
   if (AUTH_ON) {
-    const uid = await authUser(req);
-    if (!uid) return json(res, 401, { error: 'Please log in to chat.' });
-    if (limited(uid)) return json(res, 429, { error: 'You are sending messages very fast. Please wait a few minutes.' });
+    let who, max = 40;
+    if ((req.headers.authorization || '').startsWith('Bearer ')) {
+      who = await authUser(req);
+      if (!who) return json(res, 401, { error: 'Your login expired. Please refresh the page and log in again.' });
+    } else { who = 'guest:' + clientIp(req); max = 15; } // guests: no login, lower limit
+    if (limited(who, max)) return json(res, 429, { error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' });
   }
   let messages;
   try {

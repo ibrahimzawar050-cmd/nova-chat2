@@ -14,10 +14,11 @@ const SUGGESTIONS = [
   ['Translate to Spanish', '"Where is the train station?"'], ['Write a short story', 'about a robot who loves gardening']
 ];
 
-let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, warned = false;
+let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 // Saves to the browser (local mode) or to the user's cloud account (login mode).
 const save = c => {
+  if (guest) return; // guests: nothing is saved
   if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats)); } catch {} return; }
   c = c || chat();
   if (c && c.messages.length) sb.from('chats').upsert({ id: c.id, title: c.title, messages: c.messages, updated: c.updated })
@@ -111,7 +112,7 @@ function renderChat() {
     box.innerHTML = `<div class="welcome"><span class="logo"></span><h1>Hi, I'm Nova</h1><p>Ask me anything — maths, science, code, football, games, writing and more.</p><div class="sug"></div></div>`;
     SUGGESTIONS.forEach(([t, s]) => {
       const b = document.createElement('button'); b.innerHTML = `<b>${esc(t)}</b><small>${esc(s)}</small>`;
-      b.onclick = () => send(t + (s.startsWith('in ') || s.startsWith('with ') || s.startsWith('solve') ? ' — ' + s : s.startsWith('"') ? ': ' + s : ' — ' + s));
+      b.onclick = () => send(t + (s.startsWith('"') ? ': ' + s : ' — ' + s));
       box.querySelector('.sug').appendChild(b);
     });
   } else c.messages.forEach((m, i) => box.appendChild(msgEl(m, i)));
@@ -264,8 +265,10 @@ function showAuth(msg, fatal) {
   const a = $('#auth'); a.hidden = false;
   a.innerHTML = `<div class="card"><span class="logo"></span><h2>Welcome to Nova</h2><p>Log in so your chats are saved to your own account and open on any device.</p>
     ${fatal ? '' : '<input id="em" type="email" placeholder="Email" autocomplete="email"><input id="pw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="row"><button id="li" class="new">Log in</button><button id="su" class="alt">Create account</button></div>'}
-    <div id="aerr" class="aerr"></div></div>`;
+    <div id="aerr" class="aerr"></div>
+    <button id="gu" class="alt">Continue as guest</button><small class="gnote">Guests can chat, but chats are not saved and disappear when you refresh.</small></div>`;
   const err = t => $('#aerr').textContent = t; if (msg) err(msg);
+  $('#gu').onclick = () => { sessionStorage.setItem('nova.guest', '1'); location.reload(); };
   if (fatal) return;
   const go = async mode => {
     const email = $('#em').value.trim(), password = $('#pw').value;
@@ -273,7 +276,7 @@ function showAuth(msg, fatal) {
     err(mode === 'su' ? 'Creating your account…' : 'Logging in…');
     const { data, error } = mode === 'su' ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
     if (error) return err(error.message);
-    if (data.session) location.reload(); else err('Account created! Check your email to confirm it, then log in.');
+    if (data.session) { sessionStorage.removeItem('nova.guest'); location.reload(); } else err('Account created! Check your email to confirm it, then log in.');
   };
   $('#li').onclick = () => go('li'); $('#su').onclick = () => go('su');
   $('#pw').onkeydown = e => { if (e.key === 'Enter') go('li'); };
@@ -281,17 +284,27 @@ function showAuth(msg, fatal) {
 async function boot() {
   let cfg = {}; try { cfg = await (await fetch('/api/config')).json(); } catch {}
   if (cfg.supabaseUrl) {
-    if (!window.supabase) return showAuth('Could not load the login library. Check your internet connection and refresh the page.', true);
-    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.anonKey);
-    const { data } = await sb.auth.getSession();
-    if (!data.session) return showAuth();
-    $('#user').hidden = false; $('#userEmail').textContent = data.session.user.email;
-    $('#logout').onclick = () => sb.auth.signOut().then(() => { localStorage.removeItem('nova.cur'); location.reload(); });
-    const { data: rows, error } = await sb.from('chats').select('id,title,messages,updated').order('updated', { ascending: false });
-    if (error) alert('Could not load your chats: ' + error.message);
-    chats = rows || [];
+    const wantGuest = sessionStorage.getItem('nova.guest') === '1';
+    let session = null;
+    if (window.supabase) {
+      sb = window.supabase.createClient(cfg.supabaseUrl, cfg.anonKey);
+      session = (await sb.auth.getSession()).data.session;
+    }
+    if (session) {
+      sessionStorage.removeItem('nova.guest');
+      $('#user').hidden = false; $('#userEmail').textContent = session.user.email;
+      $('#logout').onclick = () => sb.auth.signOut().then(() => { localStorage.removeItem('nova.cur'); location.reload(); });
+      const { data: rows, error } = await sb.from('chats').select('id,title,messages,updated').order('updated', { ascending: false });
+      if (error) alert('Could not load your chats: ' + error.message);
+      chats = rows || [];
+    } else if (wantGuest) {
+      sb = null; guest = true;
+      $('#user').hidden = false; $('#userEmail').textContent = 'Guest · chats are not saved';
+      $('#logout').textContent = 'Log in';
+      $('#logout').onclick = () => { sessionStorage.removeItem('nova.guest'); location.reload(); };
+    } else return showAuth(window.supabase ? '' : 'Could not load the login library. Check your internet connection, or continue as a guest.', !window.supabase);
   } else { try { chats = JSON.parse(localStorage.getItem('nova.chats') || '[]'); } catch {} }
-  cur = localStorage.getItem('nova.cur'); if (!chats.some(c => c.id === cur)) cur = null;
+  cur = guest ? null : localStorage.getItem('nova.cur'); if (!chats.some(c => c.id === cur)) cur = null;
   setBusy(false); renderList(); renderChat();
 }
 boot();

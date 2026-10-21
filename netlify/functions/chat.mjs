@@ -21,7 +21,7 @@ async function authUser(req, url, key) {
   } catch { return null; }
 }
 // 40 messages per 10 minutes per user (or per IP when login is off). Best-effort: resets when the function restarts.
-const limited = who => { const now = Date.now(), a = (hits.get(who) || []).filter(x => now - x < 600000); a.push(now); hits.set(who, a); if (hits.size > 2000) hits.clear(); return a.length > 40; };
+const limited = (who, max = 40) => { const now = Date.now(), a = (hits.get(who) || []).filter(x => now - x < 600000); a.push(now); hits.set(who, a); if (hits.size > 2000) hits.clear(); return a.length > max; };
 
 export default async (req, context) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -30,12 +30,15 @@ export default async (req, context) => {
 
   let who = (context && context.ip) || 'anon';
   const sbUrl = (env('SUPABASE_URL') || '').replace(/\/$/, ''), sbKey = env('SUPABASE_ANON_KEY') || '';
+  let max = 40;
   if (sbUrl && sbKey) {
-    const uid = await authUser(req, sbUrl, sbKey);
-    if (!uid) return json({ error: 'Please log in to chat.' }, 401);
-    who = uid;
+    if ((req.headers.get('authorization') || '').startsWith('Bearer ')) {
+      const uid = await authUser(req, sbUrl, sbKey);
+      if (!uid) return json({ error: 'Your login expired. Please refresh the page and log in again.' }, 401);
+      who = uid;
+    } else { who = 'guest:' + who; max = 15; } // guests: no login, lower limit
   }
-  if (limited(who)) return json({ error: 'You are sending messages very fast. Please wait a few minutes.' }, 429);
+  if (limited(who, max)) return json({ error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' }, 429);
 
   let messages;
   try {
