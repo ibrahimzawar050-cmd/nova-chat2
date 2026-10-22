@@ -9,6 +9,16 @@ Help with maths, science, history, geography, coding, football, gaming, creative
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
 If you don't know something or aren't sure, say so plainly instead of guessing.`;
 
+const MODES = {
+  code: 'MODE: Coding. Act as a senior software engineer. Give complete, working code in fenced code blocks with a language tag, then a short explanation and how to run it. Ask a question only if something essential is missing.',
+  write: 'MODE: Writing. Act as a skilled writing partner (essays, emails, stories, speeches, captions). Deliver a polished draft first, then offer one or two ways to adjust the tone or length.',
+  song: 'MODE: Song writing. Write ORIGINAL song lyrics (never reproduce existing songs). Use labelled sections like [Verse 1], [Chorus], [Verse 2], [Bridge]. End with a short line suggesting style, tempo and a simple chord progression.',
+  slides: 'MODE: Slides. Create a presentation. Reply with one short intro sentence, then the slides. Start EVERY slide with a line beginning "## " followed by the slide title (use "## " for nothing else). Under each title put 3 to 5 short bullet points. Make the first slide a title slide and the last a summary or next steps.',
+  research: 'MODE: Deep research. You have NO live web access, so write a thorough, well-structured report from your own knowledge: summary, key facts, different viewpoints, open questions, and a section "What to double-check". Be clear about uncertainty. Never invent sources, links, quotes or statistics.',
+  learn: 'MODE: Guided learning. Be a patient Socratic tutor. Do not dump the full answer at once. Begin by asking one short question about what the learner already knows, then teach in small steps: explain one idea, then ask one check question. Give hints instead of answers when they are stuck, praise effort, and finish with a short recap and an offer of a quick quiz.'
+};
+const sys = mode => SYSTEM() + (MODES[mode] ? '\n\n' + MODES[mode] : '');
+
 async function authUser(req, url, key) {
   const t = (req.headers.get('authorization') || '').replace(/^Bearer /, '');
   if (!t) return null;
@@ -40,9 +50,10 @@ export default async (req, context) => {
   }
   if (limited(who, max)) return json({ error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' }, 429);
 
-  let messages;
+  let messages, mode;
   try {
     const body = await req.json();
+    mode = typeof body.mode === 'string' ? body.mode : null;
     messages = (body.messages || []).slice(-40)
       .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
       .map(m => ({ role: m.role, content: m.content }));
@@ -54,7 +65,7 @@ export default async (req, context) => {
     method: 'POST', signal: req.signal,
     headers: { Authorization: 'Bearer ' + key, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model, max_tokens: 4096, stream: true, messages: [{ role: 'system', content: SYSTEM() }, ...messages],
+      model, max_tokens: 4096, stream: true, messages: [{ role: 'system', content: sys(mode) }, ...messages],
       ...(model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {})
     })
   });

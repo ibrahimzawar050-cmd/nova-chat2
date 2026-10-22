@@ -88,7 +88,7 @@ function msgEl(m, i) {
     d.firstChild.textContent = m.content;
     if (m.file) d.firstChild.insertAdjacentHTML('afterbegin', `<div class="file">📎 ${esc(m.file.name)}</div>`);
   } else {
-    d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button></div></div>`;
+    d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button><button class="icon pres" title="Show as slides" style="display:none">▶ Present</button></div></div>`;
     m.image ? fillImage(d, m) : fillAI(d, m, false);
   }
   return d;
@@ -98,6 +98,7 @@ function fillAI(d, m, streaming) {
   if (!m.content && streaming) body.innerHTML = '<div class="dots"><i></i><i></i><i></i></div>';
   else { body.innerHTML = md(m.content); body.classList.toggle('cur', streaming); }
   d.querySelector('.acts2').style.display = m.content && !streaming ? '' : 'none';
+  const pr = d.querySelector('.pres'); if (pr) pr.style.display = m.mode === 'slides' && m.content && !streaming ? '' : 'none';
   const old = d.querySelector('.err'); if (old) old.remove();
   if (m.error) {
     const e = document.createElement('div'); e.className = 'err';
@@ -141,7 +142,7 @@ function setBusy(b) {
 async function send(text) {
   text = (text ?? $('#input').value).trim();
   if (busy || (!text && !file)) return;
-  if (!file && (imgMode || /^\/image\s+/i.test(text))) return makeImage(text);
+  if (!file && (mode === 'image' || /^\/image\s+/i.test(text))) return makeImage(text);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   const m = { role: 'user', content: text || 'Please look at the attached file.' };
@@ -155,7 +156,8 @@ const apiText = m => m.file ? `${m.content}\n\n[Attached file: ${m.file.name}]\n
 
 async function generate(c) {
   stopSpeaking();
-  const ai = { role: 'assistant', content: '' }; c.messages.push(ai); c.updated = Date.now();
+  const m0 = mode && mode !== 'image' ? mode : null;
+  const ai = { role: 'assistant', content: '' }; if (m0) ai.mode = m0; c.messages.push(ai); c.updated = Date.now();
   renderList(); renderChat(); setBusy(true);
   const el = $('#msgs').lastElementChild; let raf = 0;
   const paint = () => { raf = 0; const near = $('#scroll').scrollHeight - $('#scroll').scrollTop - $('#scroll').clientHeight < 140; fillAI(el, ai, true); if (near) $('#scroll').scrollTop = 1e9; };
@@ -168,7 +170,7 @@ async function generate(c) {
       if (!data.session) throw new Error('Your login expired. Please refresh the page and log in again.');
       headers.Authorization = 'Bearer ' + data.session.access_token;
     }
-    const res = await fetch('/api/chat', { method: 'POST', headers, body: JSON.stringify({ messages: history }), signal: ctrl.signal });
+    const res = await fetch('/api/chat', { method: 'POST', headers, body: JSON.stringify({ messages: history, mode: m0 }), signal: ctrl.signal });
     if (!res.ok) { let e = `Server error (${res.status})`; try { e = (await res.json()).error || e; } catch {} throw new Error(e); }
     const rd = res.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -210,6 +212,8 @@ $('#file').onchange = async e => {
   autosize(); $('#input').focus();
 };
 $('#msgs').addEventListener('click', e => {
+  const pb = e.target.closest('.pres');
+  if (pb) return openDeck(chat().messages[pb.closest('.msg').dataset.i].content);
   const ib = e.target.closest('.imgre, .imgdl');
   if (ib) {
     const el = ib.closest('.msg'), m = chat().messages[el.dataset.i];
@@ -231,7 +235,7 @@ $('#theme').onclick = () => theme(document.documentElement.dataset.theme === 'da
 theme(localStorage.getItem('nova.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
 
 // ---------- Images (free Pollinations service; the browser loads the picture directly) ----------
-let imgMode = false, useCF = false;
+let mode = null, useCF = false;
 const GUEST_IMG_MSG = 'Please log in to create images. Guests can chat, but pictures are for people with an account.';
 async function authHeaders() {
   const h = { 'Content-Type': 'application/json' };
@@ -239,16 +243,61 @@ async function authHeaders() {
   return h;
 }
 const imgUrl = i => `https://image.pollinations.ai/prompt/${encodeURIComponent(i.prompt)}?width=1024&height=1024&model=flux&nologo=true&private=true&seed=${i.seed}`;
-function setImgMode(on) {
-  imgMode = on; $('#imgbtn').classList.toggle('on', on);
-  $('#input').placeholder = on ? 'Describe the image you want…' : 'Message Nova…';
-  if (on) $('#input').focus();
+// ---------- Tools menu (modes) ----------
+const MODES = {
+  image:    { icon: '🎨', label: 'Create an image', sub: 'Draw anything from a description', hint: 'Describe the image you want…' },
+  song:     { icon: '🎵', label: 'Make a song', sub: 'Original lyrics, style and chords', hint: 'What should the song be about?' },
+  code:     { icon: '💻', label: 'Code', sub: 'Write and fix programs', hint: 'What should we build or fix?' },
+  write:    { icon: '✍️', label: 'Write', sub: 'Essays, emails, stories, speeches', hint: 'What should I write?' },
+  slides:   { icon: '📊', label: 'Make slides', sub: 'A presentation you can play full screen', hint: 'What is the presentation about?' },
+  research: { icon: '🔎', label: 'Deep research', sub: 'Thorough report (no live web search)', hint: 'What should I research?' },
+  learn:    { icon: '🎓', label: 'Guided learning', sub: 'Learn step by step with questions', hint: 'What do you want to learn?' }
+};
+function setMode(m) {
+  mode = m || null;
+  const chip = $('#mode'), info = MODES[mode];
+  chip.hidden = !info;
+  if (info) { chip.innerHTML = `${info.icon} ${esc(info.label)} <button class="mini" title="Turn off">✕</button>`; chip.querySelector('button').onclick = () => setMode(null); }
+  $('#toolbtn').classList.toggle('on', !!info);
+  $('#input').placeholder = info ? info.hint : 'Message Nova…';
+  $('#tools').hidden = true;
+  if (info) $('#input').focus();
 }
+function buildTools() {
+  const t = $('#tools'); t.innerHTML = '';
+  Object.entries(MODES).forEach(([k, v]) => {
+    const locked = k === 'image' && guest;
+    const b = document.createElement('button'); b.className = 'tool' + (k === mode ? ' on' : '') + (locked ? ' lock' : '');
+    b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(locked ? 'Log in to use this' : v.sub)}</small></span>`;
+    b.onclick = () => locked ? (t.hidden = true, alert(GUEST_IMG_MSG)) : setMode(k === mode ? null : k);
+    t.appendChild(b);
+  });
+}
+$('#toolbtn').onclick = e => { e.stopPropagation(); const t = $('#tools'); if (t.hidden) buildTools(); t.hidden = !t.hidden; };
+document.addEventListener('click', e => { if (!e.target.closest('#tools')) $('#tools').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#tools').hidden = true; });
+
+// ---------- Slides viewer ----------
+function openDeck(text) {
+  const slides = text.split(/^##\s+/m).slice(1).map(p => { const nl = p.indexOf('\n'); return { title: (nl < 0 ? p : p.slice(0, nl)).trim(), body: nl < 0 ? '' : p.slice(nl + 1) }; });
+  if (!slides.length) return alert('I could not find any slides in this answer.');
+  let i = 0; const d = $('#deck'); d.hidden = false;
+  const close = () => { d.hidden = true; d.innerHTML = ''; document.removeEventListener('keydown', key); };
+  const draw = () => {
+    const s = slides[i];
+    d.innerHTML = `<div class="slide"><h2>${inline(s.title)}</h2><div>${md(s.body)}</div></div><div class="deckbar"><button data-d="-1">◀ Back</button><span>${i + 1} / ${slides.length}</span><button data-d="1">Next ▶</button><button data-d="x">✕ Close</button></div>`;
+  };
+  const go = n => { i = Math.max(0, Math.min(slides.length - 1, i + n)); draw(); };
+  const key = e => { if (e.key === 'ArrowRight' || e.key === ' ') go(1); else if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'Escape') close(); };
+  d.onclick = e => { const b = e.target.closest('button'); if (!b) return; b.dataset.d === 'x' ? close() : go(+b.dataset.d); };
+  document.addEventListener('keydown', key); draw();
+}
+
 function makeImage(prompt) {
   prompt = prompt.replace(/^\/image\s+/i, '').trim().slice(0, 500);
   if (guest) return alert(GUEST_IMG_MSG);
   if (busy || !prompt) return;
-  setImgMode(false);
+  setMode(null);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   if (!c.messages.length) c.title = ('🎨 ' + prompt).slice(0, 40);
@@ -289,7 +338,6 @@ function downloadImage(i) {
   fetch(url).then(r => r.blob()).then(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'nova-image.jpg'; a.click(); })
     .catch(() => window.open(url, '_blank')); // if the browser blocks the direct download, open it so you can save it
 }
-$('#imgbtn').onclick = () => guest ? alert(GUEST_IMG_MSG) : setImgMode(!imgMode);
 
 // ---------- Voice: speech in (mic) and speech out (read aloud) ----------
 const synth = window.speechSynthesis;
@@ -373,7 +421,6 @@ async function boot() {
       sb = null; guest = true;
       $('#user').hidden = false; $('#userEmail').textContent = 'Guest · chats are not saved';
       $('#logout').textContent = 'Log in';
-      $('#imgbtn').style.opacity = '.4'; $('#imgbtn').title = 'Log in to create images';
       $('#logout').onclick = () => { sessionStorage.removeItem('nova.guest'); location.reload(); };
     } else return showAuth(window.supabase ? '' : 'Could not load the login library. Check your internet connection, or continue as a guest.', !window.supabase);
   } else { try { chats = JSON.parse(localStorage.getItem('nova.chats') || '[]'); } catch {} }
