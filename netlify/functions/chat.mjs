@@ -1,10 +1,10 @@
-// Nova chat endpoint for Netlify: checks login (if enabled), calls Groq, streams the answer back.
+// Aura chat endpoint for Netlify: checks login (if enabled), calls Groq, streams the answer back.
 // The API key lives only in Netlify's environment variables, never in the browser.
 const env = k => (globalThis.Netlify ? Netlify.env.get(k) : process.env[k]);
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile'];
 const tokens = new Map(), hits = new Map();
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
-const SYSTEM = () => `You are Nova, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
+const SYSTEM = () => `You are Aura, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
 Help with maths, science, history, geography, coding, football, gaming, creative writing, summarising, translation and everyday life.
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
 If you don't know something or aren't sure, say so plainly instead of guessing.`;

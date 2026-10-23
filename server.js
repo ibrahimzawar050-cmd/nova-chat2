@@ -1,4 +1,4 @@
-// Nova backend: serves the frontend and proxies chat to the Anthropic API.
+// Aura backend: serves the frontend and proxies chat to the Anthropic API.
 // The API key lives only here (env var / .env) and never reaches the browser.
 const http = require('http'), fs = require('fs'), path = require('path');
 
@@ -12,7 +12,7 @@ try { // tiny .env loader (no dependencies)
 const PORT = process.env.PORT || 3000;
 // Free option: Groq (GROQ_API_KEY). Paid option: Anthropic (ANTHROPIC_API_KEY). Groq wins if both are set.
 const PROVIDER = process.env.GROQ_API_KEY ? 'groq' : process.env.ANTHROPIC_API_KEY ? 'anthropic' : null;
-// Groq model availability changes, so Nova tries these in order until one works (unless MODEL is set).
+// Groq model availability changes, so Aura tries these in order until one works (unless MODEL is set).
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile'];
 const MODEL = process.env.MODEL || (PROVIDER === 'groq' ? GROQ_MODELS[0] : 'claude-sonnet-5-5');
 // Optional accounts: set both to require login and keep chats per user (Supabase). Unset = local mode, no login.
@@ -38,7 +38,7 @@ const CF_URL = () => `${(process.env.CF_BASE_URL || 'https://api.cloudflare.com/
 const GROQ_URL = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1') + '/chat/completions';
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
-const system = () => `You are Nova, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
+const system = () => `You are Aura, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
 Help with maths, science, history, geography, coding, football, gaming, creative writing, summarising, translation and everyday life.
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
 If you don't know something or aren't sure, say so plainly instead of guessing.`;
@@ -179,4 +179,4 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
     res.end(data);
   });
-}).listen(PORT, () => console.log(`Nova running at http://localhost:${PORT}  (provider: ${PROVIDER || 'NONE'}, model: ${MODEL}, key ${PROVIDER ? 'set' : 'MISSING'}, login ${AUTH_ON ? 'REQUIRED' : 'off'}, fast images ${CF_ON ? 'on' : 'off'})`));
+}).listen(PORT, () => console.log(`Aura running at http://localhost:${PORT}  (provider: ${PROVIDER || 'NONE'}, model: ${MODEL}, key ${PROVIDER ? 'set' : 'MISSING'}, login ${AUTH_ON ? 'REQUIRED' : 'off'}, fast images ${CF_ON ? 'on' : 'off'})`));

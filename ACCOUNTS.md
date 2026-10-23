@@ -1,6 +1,6 @@
 # Add logins + saved chats (Supabase, free)
 
-Without these settings Nova works exactly as before (no login, chats stay in the browser).
+Without these settings Aura works exactly as before (no login, chats stay in the browser).
 With them, people must log in with an email, and each person's chats are saved to their own account.
 
 1. Make a free account at https://supabase.com and click New project (any name, pick a database password, nearest region).
@@ -11,7 +11,7 @@ With them, people must log in with an email, and each person's chats are saved t
 5. Put them in `.env` (local) or in Render's Environment Variables (online):
    SUPABASE_URL=https://xxxx.supabase.co
    SUPABASE_ANON_KEY=sb_publishable_...
-6. Restart Nova. It prints `login REQUIRED`.
+6. Restart Aura. It prints `login REQUIRED`.
 
 Notes
 - "Continue as guest" lets people chat without an account. Guests cannot create images (login required) but can use every other tool in the menu. Guest chats are never saved (gone on refresh) and guests get a lower limit (15 messages per 10 minutes per person) than logged-in users (40).
