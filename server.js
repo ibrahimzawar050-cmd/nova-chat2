@@ -35,6 +35,8 @@ const clientIp = req => (req.headers['x-forwarded-for'] || '').split(',')[0].tri
 // Optional faster image service (Cloudflare Workers AI, free daily allowance). Without it, the browser falls back to Pollinations.
 const CF_ID = process.env.CF_ACCOUNT_ID, CF_TOKEN = process.env.CF_API_TOKEN, CF_ON = !!(CF_ID && CF_TOKEN);
 const CF_URL = () => `${(process.env.CF_BASE_URL || 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
+// Optional video (Pollinations, free weekly credits): the secret key stays on the server.
+const VIDEO_KEY = process.env.POLLINATIONS_KEY, VIDEO_ON = !!VIDEO_KEY;
 const GROQ_URL = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1') + '/chat/completions';
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -45,6 +47,7 @@ If you don't know something or aren't sure, say so plainly instead of guessing.
 If anyone asks who made, created or built you, answer: "I was made by a 10-year-old boy named Muhammad Ibrahim Zawar." You may add that you run on an AI language model behind the scenes, but never claim to be human.`;
 
 const MODES = {
+  scenes: 'MODE: Storyboard. Reply with ONLY a JSON array of exactly 4 strings and nothing else (no markdown, no explanation). Each string is one vivid, self-contained sentence describing a single 5-second video scene. The 4 scenes tell one continuing story with the same characters, setting and visual style.',
   code: 'MODE: Coding. Act as a senior software engineer. Give complete, working code in fenced code blocks with a language tag, then a short explanation and how to run it. Ask a question only if something essential is missing.',
   write: 'MODE: Writing. Act as a skilled writing partner (essays, emails, stories, speeches, captions). Deliver a polished draft first, then offer one or two ways to adjust the tone or length.',
   song: 'MODE: Song writing. Write ORIGINAL song lyrics (never reproduce existing songs). Use labelled sections like [Verse 1], [Chorus], [Verse 2], [Bridge]. End with a short line suggesting style, tempo and a simple chord progression.',
@@ -87,6 +90,36 @@ async function image(req, res) {
     }
     json(res, 200, { image: img });
   } catch { json(res, 502, { error: 'The image service did not respond. Please try again.' }); }
+}
+
+async function video(req, res) {
+  if (!VIDEO_ON) return json(res, 501, { error: 'Video is not set up yet. The owner needs to add a free Pollinations key (see VIDEOS.md).' });
+  let who = 'ip:' + clientIp(req);
+  if (AUTH_ON) {
+    if (!(req.headers.authorization || '').startsWith('Bearer ')) return json(res, 403, { error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' });
+    who = await authUser(req);
+    if (!who) return json(res, 401, { error: 'Your login expired. Please refresh the page and log in again.' });
+  }
+  if (limited(who + ':vid', 8)) return json(res, 429, { error: 'Video limit reached (8 clips per 10 minutes). Please wait a few minutes.' });
+  let prompt;
+  try { prompt = String(JSON.parse(await readBody(req, 20000)).prompt || '').trim().slice(0, 400); if (!prompt) throw 0; }
+  catch { return json(res, 400, { error: 'Please describe the video you want.' }); }
+  const ac = new AbortController(); res.on('close', () => ac.abort()); const timer = setTimeout(() => ac.abort(), 170000);
+  try {
+    const u = new URL((process.env.POLLINATIONS_BASE_URL || 'https://gen.pollinations.ai') + '/video/' + encodeURIComponent(prompt));
+    u.searchParams.set('model', process.env.VIDEO_MODEL || 'wan-fast');
+    const up = await fetch(u, { headers: { Authorization: 'Bearer ' + VIDEO_KEY }, signal: ac.signal });
+    const type = up.headers.get('content-type') || '';
+    if (!up.ok || !type.startsWith('video/')) {
+      let msg = `Video service error (${up.status})`; try { msg = (await up.json()).error.message || msg; } catch {}
+      if ([402, 429].includes(up.status)) msg = 'The free video allowance is used up for now. Please try again later.';
+      return json(res, 502, { error: msg });
+    }
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+    for await (const chunk of up.body) res.write(chunk);
+    res.end();
+  } catch { if (!res.headersSent) json(res, 502, { error: 'The video service did not respond in time. Please try again.' }); else res.end(); }
+  finally { clearTimeout(timer); }
 }
 
 async function chat(req, res) {
@@ -173,7 +206,8 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (req.method === 'POST' && url.pathname === '/api/chat') return chat(req, res);
   if (req.method === 'POST' && url.pathname === '/api/image') return image(req, res);
-  if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...(AUTH_ON ? { supabaseUrl: SB_URL, anonKey: SB_KEY } : {}), cf: CF_ON });
+  if (req.method === 'POST' && url.pathname === '/api/video') return video(req, res);
+  if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...(AUTH_ON ? { supabaseUrl: SB_URL, anonKey: SB_KEY } : {}), cf: CF_ON, video: VIDEO_ON, videoMode: process.env.POLLINATIONS_APP_KEY ? 'byop' : VIDEO_ON ? 'shared' : '', pollenApp: process.env.POLLINATIONS_APP_KEY || '', videoModel: process.env.VIDEO_MODEL || 'wan-fast' });
   if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
   let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
   if (!file.startsWith(PUBLIC)) return json(res, 403, { error: 'Forbidden' });

@@ -120,3 +120,7 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 .slide ul,.slide ol{line-height:1.7}
 .deckbar{display:flex;align-items:center;justify-content:center;gap:16px;padding:14px;border-top:1px solid var(--line);color:var(--mute)}
 .deckbar button{padding:8px 16px;border-radius:12px;border:1px solid var(--line);background:var(--card)}.deckbar button:hover{border-color:var(--accent)}
+
+.genvid{display:block;width:min(100%,520px);border-radius:16px;border:1px solid var(--line);background:#000}
+.vidcap{color:var(--mute);font-size:13px;margin-top:6px;max-width:520px}
+.tools{max-height:70vh;overflow:auto}
