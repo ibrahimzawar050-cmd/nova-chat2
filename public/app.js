@@ -236,7 +236,7 @@ theme(localStorage.getItem('nova.theme') || (matchMedia('(prefers-color-scheme: 
 
 // ---------- Images (free Pollinations service; the browser loads the picture directly) ----------
 let mode = null, useCF = false;
-const GUEST_IMG_MSG = 'Please log in to create images. Guests can chat, but pictures are for people with an account.';
+const GUEST_IMG_MSG = 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.';
 async function authHeaders() {
   const h = { 'Content-Type': 'application/json' };
   if (sb) { const { data } = await sb.auth.getSession(); if (data.session) h.Authorization = 'Bearer ' + data.session.access_token; }
@@ -266,7 +266,7 @@ function setMode(m) {
 function buildTools() {
   const t = $('#tools'); t.innerHTML = '';
   Object.entries(MODES).forEach(([k, v]) => {
-    const locked = k === 'image' && guest;
+    const locked = guest; // guests cannot use any tool
     const b = document.createElement('button'); b.className = 'tool' + (k === mode ? ' on' : '') + (locked ? ' lock' : '');
     b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(locked ? 'Log in to use this' : v.sub)}</small></span>`;
     b.onclick = () => locked ? (t.hidden = true, alert(GUEST_IMG_MSG)) : setMode(k === mode ? null : k);
@@ -421,6 +421,7 @@ async function boot() {
       sb = null; guest = true;
       $('#user').hidden = false; $('#userEmail').textContent = 'Guest · chats are not saved';
       $('#logout').textContent = 'Log in';
+      $('#toolbtn').style.opacity = '.5'; $('#toolbtn').title = 'Log in to use the tools';
       $('#logout').onclick = () => { sessionStorage.removeItem('nova.guest'); location.reload(); };
     } else return showAuth(window.supabase ? '' : 'Could not load the login library. Check your internet connection, or continue as a guest.', !window.supabase);
   } else { try { chats = JSON.parse(localStorage.getItem('nova.chats') || '[]'); } catch {} }

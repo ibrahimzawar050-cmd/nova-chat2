@@ -26,7 +26,7 @@ export default async (req, context) => {
       const uid = await authUser(req, sbUrl, sbKey);
       if (!uid) return json({ error: 'Your login expired. Please refresh the page and log in again.' }, 401);
       who = uid;
-    } else return json({ error: 'Please log in to create images. Guests can chat, but pictures are for people with an account.' }, 403);
+    } else return json({ error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' }, 403);
   }
   if (limited(who + ':img', max)) return json({ error: 'Image limit reached. Please wait a few minutes and try again.' }, 429);
   let prompt;

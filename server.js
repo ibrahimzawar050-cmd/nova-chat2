@@ -41,7 +41,8 @@ const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript
 const system = () => `You are Aura, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
 Help with maths, science, history, geography, coding, football, gaming, creative writing, summarising, translation and everyday life.
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
-If you don't know something or aren't sure, say so plainly instead of guessing.`;
+If you don't know something or aren't sure, say so plainly instead of guessing.
+If anyone asks who made, created or built you, answer: "I was made by a 10-year-old boy named Muhammad Ibrahim Zawar." You may add that you run on an AI language model behind the scenes, but never claim to be human.`;
 
 const MODES = {
   code: 'MODE: Coding. Act as a senior software engineer. Give complete, working code in fenced code blocks with a language tag, then a short explanation and how to run it. Ask a question only if something essential is missing.',
@@ -70,7 +71,7 @@ async function image(req, res) {
     if ((req.headers.authorization || '').startsWith('Bearer ')) {
       who = await authUser(req);
       if (!who) return json(res, 401, { error: 'Your login expired. Please refresh the page and log in again.' });
-    } else return json(res, 403, { error: 'Please log in to create images. Guests can chat, but pictures are for people with an account.' });
+    } else return json(res, 403, { error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' });
   } else who = 'ip:' + clientIp(req);
   if (limited(who + ':img', max)) return json(res, 429, { error: 'Image limit reached. Please wait a few minutes and try again.' });
   let prompt;
@@ -89,19 +90,21 @@ async function image(req, res) {
 }
 
 async function chat(req, res) {
+  let isGuest = false;
   if (!PROVIDER) return json(res, 500, { error: 'The server has no API key configured. Add GROQ_API_KEY (free) to the .env file. See the README.' });
   if (AUTH_ON) {
     let who, max = 40;
     if ((req.headers.authorization || '').startsWith('Bearer ')) {
       who = await authUser(req);
       if (!who) return json(res, 401, { error: 'Your login expired. Please refresh the page and log in again.' });
-    } else { who = 'guest:' + clientIp(req); max = 15; } // guests: no login, lower limit
+    } else { who = 'guest:' + clientIp(req); max = 15; isGuest = true; } // guests: no login, lower limit
     if (limited(who, max)) return json(res, 429, { error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' });
   }
   let messages, mode;
   try {
     const body = JSON.parse(await readBody(req));
     mode = typeof body.mode === 'string' ? body.mode : null;
+    if (isGuest && MODES[mode]) return json(res, 403, { error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' });
     messages = (body.messages || []).slice(-40)
       .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
       .map(m => ({ role: m.role, content: m.content }));

@@ -7,7 +7,8 @@ const json = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 const SYSTEM = () => `You are Aura, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
 Help with maths, science, history, geography, coding, football, gaming, creative writing, summarising, translation and everyday life.
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
-If you don't know something or aren't sure, say so plainly instead of guessing.`;
+If you don't know something or aren't sure, say so plainly instead of guessing.
+If anyone asks who made, created or built you, answer: "I was made by a 10-year-old boy named Muhammad Ibrahim Zawar." You may add that you run on an AI language model behind the scenes, but never claim to be human.`;
 
 const MODES = {
   code: 'MODE: Coding. Act as a senior software engineer. Give complete, working code in fenced code blocks with a language tag, then a short explanation and how to run it. Ask a question only if something essential is missing.',
@@ -40,13 +41,13 @@ export default async (req, context) => {
 
   let who = (context && context.ip) || 'anon';
   const sbUrl = (env('SUPABASE_URL') || '').replace(/\/$/, ''), sbKey = env('SUPABASE_ANON_KEY') || '';
-  let max = 40;
+  let max = 40, isGuest = false;
   if (sbUrl && sbKey) {
     if ((req.headers.get('authorization') || '').startsWith('Bearer ')) {
       const uid = await authUser(req, sbUrl, sbKey);
       if (!uid) return json({ error: 'Your login expired. Please refresh the page and log in again.' }, 401);
       who = uid;
-    } else { who = 'guest:' + who; max = 15; } // guests: no login, lower limit
+    } else { who = 'guest:' + who; max = 15; isGuest = true; } // guests: no login, lower limit
   }
   if (limited(who, max)) return json({ error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' }, 429);
 
@@ -54,6 +55,7 @@ export default async (req, context) => {
   try {
     const body = await req.json();
     mode = typeof body.mode === 'string' ? body.mode : null;
+    if (isGuest && MODES[mode]) return json({ error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' }, 403);
     messages = (body.messages || []).slice(-40)
       .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
       .map(m => ({ role: m.role, content: m.content }));

@@ -14,7 +14,7 @@ With them, people must log in with an email, and each person's chats are saved t
 6. Restart Aura. It prints `login REQUIRED`.
 
 Notes
-- "Continue as guest" lets people chat without an account. Guests cannot create images (login required) but can use every other tool in the menu. Guest chats are never saved (gone on refresh) and guests get a lower limit (15 messages per 10 minutes per person) than logged-in users (40).
+- "Continue as guest" lets people chat without an account. Guests can chat but cannot use any tool in the tools menu (images, song, code, write, slides, research, learning). This is enforced on the server. Guest chats are never saved (gone on refresh) and guests get a lower limit (15 messages per 10 minutes per person) than logged-in users (40).
 - Chats saved in your browser before login are not moved to your account.
 - No "forgot password" button yet; reset a user's password in Supabase -> Authentication -> Users.
 - The login also protects your AI key: only logged-in users can chat, limited to 40 messages per 10 minutes each.
