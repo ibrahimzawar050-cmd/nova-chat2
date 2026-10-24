@@ -440,5 +440,5 @@ const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platfo
 if (!standalone && isIOS) $('#install').hidden = false; // Safari has no install prompt, so we show the steps instead
 $('#install').onclick = async () => {
   if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; $('#install').hidden = true; }
-  else alert('To install Zint AI on your iPhone or iPad:\n\n1. Open this page in Safari.\n2. Tap the Share button (the square with an arrow).\n3. Tap "Add to Home Screen".\n4. Tap "Add".');
+  else alert('To install Zint AI on your iPhone or iPad:\n\n1. Open this page in Safari.\n2. Tap the Share button (the square with an arrow).\n3. Tap "Add to Home Screen".\n4. Tap "Add".\n\nNote: If you can\'t see the Add to Home Screen button, press See More.');
 };
