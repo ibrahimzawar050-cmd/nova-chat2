@@ -5,7 +5,14 @@
 <meta name="google-site-verification" content="K6Njo3ORgMyi_Oth402NiuJDL1yclDC9YAs9cDlQgOU" />
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Zint AI – AI Chat</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%237c5cff'/%3E%3Cpath d='M16 6l2.5 7.5L26 16l-7.5 2.5L16 26l-2.5-7.5L6 16l7.5-2.5z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#7c5cff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zint AI">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,6 +26,10 @@
     </button>
     <div id="list" class="list"></div>
     <div id="user" class="userbox" hidden><span id="userEmail"></span><button id="logout" class="mini" title="Log out">Log out</button></div>
+    <button id="install" class="ghost" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+      <span>Install app</span>
+    </button>
     <button id="auto" class="ghost" title="Read every new reply out loud">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg>
       <span id="autoLabel">Auto-read replies: Off</span>

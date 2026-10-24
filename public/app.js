@@ -246,7 +246,7 @@ const imgUrl = i => `https://image.pollinations.ai/prompt/${encodeURIComponent(i
 // ---------- Tools menu (modes) ----------
 const MODES = {
   image:    { icon: '🎨', label: 'Create an image', sub: 'Draw anything from a description', hint: 'Describe the image you want…' },
-  song:     { icon: '🎵', label: 'Make a song', sub: 'Original lyrics, style and chords', hint: 'What should the song be about?' },
+  poem:     { icon: '📜', label: 'Make a poem', sub: 'An original poem in any style', hint: 'What should the poem be about?' },
   code:     { icon: '💻', label: 'Code', sub: 'Write and fix programs', hint: 'What should we build or fix?' },
   write:    { icon: '✍️', label: 'Write', sub: 'Essays, emails, stories, speeches', hint: 'What should I write?' },
   slides:   { icon: '📊', label: 'Make slides', sub: 'A presentation you can play full screen', hint: 'What is the presentation about?' },
@@ -429,3 +429,16 @@ async function boot() {
   setBusy(false); renderList(); renderChat();
 }
 boot();
+
+// ---------- Install as an app ----------
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
+window.addEventListener('appinstalled', () => { installEvt = null; $('#install').hidden = true; });
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if (!standalone && isIOS) $('#install').hidden = false; // Safari has no install prompt, so we show the steps instead
+$('#install').onclick = async () => {
+  if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; $('#install').hidden = true; }
+  else alert('To install Zint AI on your iPhone or iPad:\n\n1. Open this page in Safari.\n2. Tap the Share button (the square with an arrow).\n3. Tap "Add to Home Screen".\n4. Tap "Add".');
+};

@@ -37,7 +37,7 @@ const CF_ID = process.env.CF_ACCOUNT_ID, CF_TOKEN = process.env.CF_API_TOKEN, CF
 const CF_URL = () => `${(process.env.CF_BASE_URL || 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 const GROQ_URL = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1') + '/chat/completions';
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 const system = () => `You are Zint AI, a friendly, accurate AI assistant. Today is ${new Date().toDateString()}.
 Help with maths, science, history, geography, coding, football, gaming, creative writing, summarising, translation and everyday life.
 Explain hard topics simply when asked. Use Markdown (headings, bullets, fenced code blocks with language tags).
@@ -47,7 +47,7 @@ If anyone asks who made, created or built you, answer: "I was made by a 10-year-
 const MODES = {
   code: 'MODE: Coding. Act as a senior software engineer. Give complete, working code in fenced code blocks with a language tag, then a short explanation and how to run it. Ask a question only if something essential is missing.',
   write: 'MODE: Writing. Act as a skilled writing partner (essays, emails, stories, speeches, captions). Deliver a polished draft first, then offer one or two ways to adjust the tone or length.',
-  song: 'MODE: Song writing. Write ORIGINAL song lyrics (never reproduce existing songs). Use labelled sections like [Verse 1], [Chorus], [Verse 2], [Bridge]. End with a short line suggesting style, tempo and a simple chord progression.',
+  poem: 'MODE: Poem writing. Write an ORIGINAL poem (never reproduce an existing poem). Pick a fitting form, such as free verse, rhyming couplets, a haiku sequence or a sonnet, unless the user names one. Give the poem a title, keep the language vivid, and add one short line at the end offering a different style or length.',
   slides: 'MODE: Slides. Create a presentation. Reply with one short intro sentence, then the slides. Start EVERY slide with a line beginning "## " followed by the slide title (use "## " for nothing else). Under each title put 3 to 5 short bullet points. Make the first slide a title slide and the last a summary or next steps.',
   research: 'MODE: Deep research. You have NO live web access, so write a thorough, well-structured report from your own knowledge: summary, key facts, different viewpoints, open questions, and a section "What to double-check". Be clear about uncertainty. Never invent sources, links, quotes or statistics.',
   learn: 'MODE: Guided learning. Be a patient Socratic tutor. Do not dump the full answer at once. Begin by asking one short question about what the learner already knows, then teach in small steps: explain one idea, then ask one check question. Give hints instead of answers when they are stuck, praise effort, and finish with a short recap and an offer of a quick quiz.'
