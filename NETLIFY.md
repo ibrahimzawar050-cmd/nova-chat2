@@ -1,4 +1,4 @@
-# Publish Aura on Netlify (free)
+# Publish Zint AI on Netlify (free)
 
 Works with or without logins. Without Supabase settings, anyone with the link can chat (each person's chats stay in their own browser).
 

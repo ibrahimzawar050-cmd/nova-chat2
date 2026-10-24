@@ -1,4 +1,4 @@
-# Put Aura online (free, with Render)
+# Put Zint AI online (free, with Render)
 
 1. Create a free account at https://github.com and make a new repository called `nova-chat`.
 2. Upload every file from this folder (drag and drop works on GitHub's "uploading an existing file" page). Do NOT upload a `.env` file.

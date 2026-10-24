@@ -1,4 +1,4 @@
-# Aura – AI chatbot
+# Zint AI – AI chatbot
 
 Real streaming AI answers through a secure Node backend. Zero npm dependencies.
 
@@ -8,7 +8,7 @@ Real streaming AI answers through a secure Node backend. Zero npm dependencies.
 3. Copy `.env.example` to `.env` and put your key after `GROQ_API_KEY=`
 4. Run `node server.js` and open http://localhost:3000
 
-Default free model: `openai/gpt-oss-120b`; Aura automatically tries other free Groq models if it is unavailable (force one with `MODEL=` in `.env`).
+Default free model: `openai/gpt-oss-120b`; Zint AI automatically tries other free Groq models if it is unavailable (force one with `MODEL=` in `.env`).
 Free tiers have rate limits; if you hit one, wait a minute. Free-tier terms can change.
 
 Paid alternative: set `ANTHROPIC_API_KEY` instead (Groq is used if both are set).

@@ -1,4 +1,4 @@
-// Aura frontend: chat state, streaming, Markdown rendering, sidebar, theme.
+// Zint AI frontend: chat state, streaming, Markdown rendering, sidebar, theme.
 const $ = s => document.querySelector(s);
 const ICON = {
   send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.5-7.6a1 1 0 000-1.8L3.4 3.4a1 1 0 00-1.4 1.2L4 11l8 1-8 1-2 6.2a1 1 0 001.4 1.2z"/></svg>',
@@ -111,7 +111,7 @@ function renderChat() {
   const box = $('#msgs'), c = chat(); box.innerHTML = '';
   $('#title').textContent = c ? c.title : 'New chat';
   if (!c || !c.messages.length) {
-    box.innerHTML = `<div class="welcome"><span class="logo"></span><h1>Hi, I'm Aura</h1><p>Ask me anything — maths, science, code, football, games, writing and more.</p><div class="sug"></div></div>`;
+    box.innerHTML = `<div class="welcome"><span class="logo"></span><h1>Hi, I'm Zint AI</h1><p>Ask me anything — maths, science, code, football, games, writing and more.</p><div class="sug"></div></div>`;
     SUGGESTIONS.forEach(([t, s]) => {
       if (guest && t === 'Create an image') return; // images are for logged-in users only
       const b = document.createElement('button'); b.innerHTML = `<b>${esc(t)}</b><small>${esc(s)}</small>`;
@@ -259,7 +259,7 @@ function setMode(m) {
   chip.hidden = !info;
   if (info) { chip.innerHTML = `${info.icon} ${esc(info.label)} <button class="mini" title="Turn off">✕</button>`; chip.querySelector('button').onclick = () => setMode(null); }
   $('#toolbtn').classList.toggle('on', !!info);
-  $('#input').placeholder = info ? info.hint : 'Message Aura…';
+  $('#input').placeholder = info ? info.hint : 'Message Zint AI…';
   $('#tools').hidden = true;
   if (info) $('#input').focus();
 }
@@ -302,7 +302,7 @@ function makeImage(prompt) {
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   if (!c.messages.length) c.title = ('🎨 ' + prompt).slice(0, 40);
   c.messages.push({ role: 'user', content: '🎨 Create an image: ' + prompt });
-  c.messages.push({ role: 'assistant', content: `(Aura created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6), cf: useCF, fresh: true } });
+  c.messages.push({ role: 'assistant', content: `(Zint AI created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6), cf: useCF, fresh: true } });
   c.updated = Date.now(); $('#input').value = ''; autosize();
   save(c); renderList(); renderChat();
 }
@@ -335,7 +335,7 @@ async function fillImage(d, m) {
 }
 function downloadImage(i) {
   const url = i.data || imgUrl(i);
-  fetch(url).then(r => r.blob()).then(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'aura-image.jpg'; a.click(); })
+  fetch(url).then(r => r.blob()).then(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'zint-image.jpg'; a.click(); })
     .catch(() => window.open(url, '_blank')); // if the browser blocks the direct download, open it so you can save it
 }
 
@@ -382,7 +382,7 @@ $('#mic').onclick = () => {
 // ---------- Accounts (only active when the server has Supabase configured) ----------
 function showAuth(msg, fatal) {
   const a = $('#auth'); a.hidden = false;
-  a.innerHTML = `<div class="card"><span class="logo"></span><h2>Welcome to Aura</h2><p>Log in so your chats are saved to your own account and open on any device.</p>
+  a.innerHTML = `<div class="card"><span class="logo"></span><h2>Welcome to Zint AI</h2><p>Log in so your chats are saved to your own account and open on any device.</p>
     ${fatal ? '' : '<input id="em" type="email" placeholder="Email" autocomplete="email"><input id="pw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="row"><button id="li" class="new">Log in</button><button id="su" class="alt">Create account</button></div>'}
     <div id="aerr" class="aerr"></div>
     <button id="gu" class="alt">Continue as guest</button><small class="gnote">Guests can chat, but chats are not saved and disappear when you refresh.</small></div>`;

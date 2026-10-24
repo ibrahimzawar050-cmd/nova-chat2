@@ -1,4 +1,4 @@
-// Aura image endpoint for Netlify: Cloudflare Workers AI (FLUX), with login/guest limits.
+// Zint AI image endpoint for Netlify: Cloudflare Workers AI (FLUX), with login/guest limits.
 const env = k => (globalThis.Netlify ? Netlify.env.get(k) : process.env[k]);
 const tokens = new Map(), hits = new Map();
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
