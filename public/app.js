@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 // Saves to the browser (local mode) or to the user's cloud account (login mode).
-const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m.video ? { ...m, video: { prompt: m.video.prompt, long: m.video.long } } : m; // never store the picture bytes
+const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m; // never store the picture bytes
 const save = c => {
   if (guest) return; // guests: nothing is saved
   if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats.map(x => ({ ...x, messages: x.messages.map(strip) })))); } catch {} return; }
@@ -89,7 +89,7 @@ function msgEl(m, i) {
     if (m.file) d.firstChild.insertAdjacentHTML('afterbegin', `<div class="file">📎 ${esc(m.file.name)}</div>`);
   } else {
     d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button><button class="icon pres" title="Show as slides" style="display:none">▶ Present</button></div></div>`;
-    m.image ? fillImage(d, m) : m.video ? fillVideo(d, m) : fillAI(d, m, false);
+    m.image ? fillImage(d, m) : fillAI(d, m, false);
   }
   return d;
 }
@@ -143,7 +143,6 @@ async function send(text) {
   text = (text ?? $('#input').value).trim();
   if (busy || (!text && !file)) return;
   if (!file && (mode === 'image' || /^\/image\s+/i.test(text))) return makeImage(text);
-  if (!file && (mode === 'video' || mode === 'film')) return makeVideo(text, mode === 'film');
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
   const m = { role: 'user', content: text || 'Please look at the attached file.' };
@@ -215,12 +214,6 @@ $('#file').onchange = async e => {
 $('#msgs').addEventListener('click', e => {
   const pb = e.target.closest('.pres');
   if (pb) return openDeck(chat().messages[pb.closest('.msg').dataset.i].content);
-  const vb = e.target.closest('.vidre, .viddl');
-  if (vb) {
-    const el = vb.closest('.msg'), m = chat().messages[el.dataset.i];
-    if (vb.classList.contains('vidre')) { m.video.clips = null; m.video.fresh = true; fillVideo(el, m); } else downloadVideo(m.video);
-    return;
-  }
   const ib = e.target.closest('.imgre, .imgdl');
   if (ib) {
     const el = ib.closest('.msg'), m = chat().messages[el.dataset.i];
@@ -242,7 +235,7 @@ $('#theme').onclick = () => theme(document.documentElement.dataset.theme === 'da
 theme(localStorage.getItem('nova.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
 
 // ---------- Images (free Pollinations service; the browser loads the picture directly) ----------
-let mode = null, useCF = false, useVideo = false, videoMode = '', videoModel = 'wan-fast', appKey = '';
+let mode = null, useCF = false;
 const GUEST_IMG_MSG = 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.';
 async function authHeaders() {
   const h = { 'Content-Type': 'application/json' };
@@ -253,8 +246,6 @@ const imgUrl = i => `https://image.pollinations.ai/prompt/${encodeURIComponent(i
 // ---------- Tools menu (modes) ----------
 const MODES = {
   image:    { icon: '🎨', label: 'Create an image', sub: 'Draw anything from a description', hint: 'Describe the image you want…' },
-  video:    { icon: '🎬', label: 'Short video', sub: 'A 5-second clip (free credits)', hint: 'Describe the video you want…' },
-  film:     { icon: '🎞️', label: 'Long video', sub: '4 scenes played together (about 20 s)', hint: 'What is the story or idea?' },
   song:     { icon: '🎵', label: 'Make a song', sub: 'Original lyrics, style and chords', hint: 'What should the song be about?' },
   code:     { icon: '💻', label: 'Code', sub: 'Write and fix programs', hint: 'What should we build or fix?' },
   write:    { icon: '✍️', label: 'Write', sub: 'Essays, emails, stories, speeches', hint: 'What should I write?' },
@@ -276,116 +267,15 @@ function buildTools() {
   const t = $('#tools'); t.innerHTML = '';
   Object.entries(MODES).forEach(([k, v]) => {
     const locked = guest; // guests cannot use any tool
-    const needConn = !locked && videoMode === 'byop' && (k === 'video' || k === 'film') && !localStorage.getItem('aura.pollen');
     const b = document.createElement('button'); b.className = 'tool' + (k === mode ? ' on' : '') + (locked ? ' lock' : '');
-    b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(locked ? 'Log in to use this' : needConn ? 'Connect your free Pollinations account first' : v.sub)}</small></span>`;
-    b.onclick = () => locked ? (t.hidden = true, alert(GUEST_IMG_MSG)) : (!useVideo && (k === 'video' || k === 'film')) ? (t.hidden = true, alert('Video is not set up yet. The owner needs to finish the Pollinations setup (see VIDEOS.md).')) : (needConn && (k === 'video' || k === 'film')) ? (t.hidden = true, confirmConnect()) : setMode(k === mode ? null : k);
+    b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(locked ? 'Log in to use this' : v.sub)}</small></span>`;
+    b.onclick = () => locked ? (t.hidden = true, alert(GUEST_IMG_MSG)) : setMode(k === mode ? null : k);
     t.appendChild(b);
   });
-  if (videoMode === 'byop' && localStorage.getItem('aura.pollen') && !guest) {
-    const d = document.createElement('button'); d.className = 'tool';
-    d.innerHTML = '<span class="ti">🔌</span><span><b>Disconnect Pollinations</b><small>Stop using your Pollinations account</small></span>';
-    d.onclick = () => { localStorage.removeItem('aura.pollen'); t.hidden = true; alert('Disconnected.'); };
-    t.appendChild(d);
-  }
 }
 $('#toolbtn').onclick = e => { e.stopPropagation(); const t = $('#tools'); if (t.hidden) buildTools(); t.hidden = !t.hidden; };
 document.addEventListener('click', e => { if (!e.target.closest('#tools')) $('#tools').hidden = true; });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#tools').hidden = true; });
-
-// ---------- Videos (Pollinations through our own server; clips are kept in memory only) ----------
-function confirmConnect() {
-  if (!appKey) return alert('Video is not set up yet. The owner needs to finish the Pollinations setup (see VIDEOS.md).');
-  if (!confirm('To make videos, connect your free Pollinations account. Your own free credits pay for them, not the site owner. Continue?')) return;
-  const state = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2);
-  sessionStorage.setItem('aura.pstate', state);
-  location.href = 'https://enter.pollinations.ai/authorize?' + new URLSearchParams({ redirect_uri: location.origin + '/', client_id: appKey, scope: 'usage', expiry: '30', state });
-}
-function handlePollenReturn() { // runs on page load: picks up the key Pollinations sends back after the visitor approves
-  const h = new URLSearchParams(location.hash.slice(1)), key = h.get('api_key');
-  if (!key) return;
-  const st = h.get('state'), want = sessionStorage.getItem('aura.pstate');
-  sessionStorage.removeItem('aura.pstate');
-  history.replaceState(null, '', location.pathname + location.search);
-  if (st && want && st !== want) return alert('The Pollinations connection could not be verified. Please try again.');
-  localStorage.setItem('aura.pollen', key);
-  setTimeout(() => alert('Connected! Your own free Pollinations credits will now be used for videos.'), 300);
-}
-function makeVideo(prompt, long) {
-  prompt = prompt.trim().slice(0, 400);
-  if (guest) return alert(GUEST_IMG_MSG);
-  if (busy || !prompt) return;
-  setMode(null);
-  let c = chat();
-  if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
-  if (!c.messages.length) c.title = ((long ? '🎞️ ' : '🎬 ') + prompt).slice(0, 40);
-  c.messages.push({ role: 'user', content: (long ? '🎞️ Long video: ' : '🎬 Short video: ') + prompt });
-  c.messages.push({ role: 'assistant', content: `(Aura made a ${long ? 'long' : 'short'} video of: ${prompt})`, video: { prompt, long, fresh: true } });
-  c.updated = Date.now(); $('#input').value = ''; autosize();
-  save(c); renderList(); renderChat();
-}
-async function planScenes(prompt) {
-  const res = await fetch('/api/chat', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], mode: 'scenes' }) });
-  if (!res.ok) { let e = `Server error (${res.status})`; try { e = (await res.json()).error || e; } catch {} throw new Error(e); }
-  const rd = res.body.getReader(), dec = new TextDecoder(); let buf = '', txt = '';
-  for (;;) {
-    const { done, value } = await rd.read(); if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let i; while ((i = buf.indexOf('\n\n')) >= 0) {
-      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
-      if (!line.startsWith('data:')) continue;
-      const ev = JSON.parse(line.slice(5)); if (ev.error) throw new Error(ev.error); if (ev.t) txt += ev.t;
-    }
-  }
-  try { const a = JSON.parse(txt.slice(txt.indexOf('['), txt.lastIndexOf(']') + 1)).filter(x => typeof x === 'string' && x.trim()).slice(0, 4); if (a.length >= 2) return a; } catch {}
-  return [prompt + ', opening shot', prompt + ', a closer look', prompt + ', the exciting moment', prompt + ', a calm ending']; // if the AI's plan was unusable
-}
-async function fetchClip(prompt) {
-  if (videoMode === 'byop') { // the visitor's own free Pollinations credits pay for this; the browser talks to Pollinations directly
-    const key = localStorage.getItem('aura.pollen');
-    if (!key) throw new Error('Please connect your free Pollinations account first: open the tools menu and pick a video tool.');
-    const res = await fetch('https://gen.pollinations.ai/video/' + encodeURIComponent(prompt.slice(0, 400)) + '?model=' + encodeURIComponent(videoModel), { headers: { Authorization: 'Bearer ' + key } });
-    if (res.status === 401 || res.status === 403) { localStorage.removeItem('aura.pollen'); throw new Error('Your Pollinations connection ended. Open the tools menu and pick a video tool to connect again.'); }
-    if (res.status === 402 || res.status === 429) throw new Error('Your free Pollinations credits are used up for now. They refill every week.');
-    if (!res.ok) throw new Error(`Video service error (${res.status})`);
-    const b = await res.blob();
-    if (!/^video\//.test(b.type)) throw new Error('The video service did not return a video. Please try again.');
-    return URL.createObjectURL(b);
-  }
-  const res = await fetch('/api/video', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ prompt }) });
-  if (!res.ok) { let e = `Video service error (${res.status})`; try { e = (await res.json()).error || e; } catch {} throw new Error(e); }
-  const b = await res.blob();
-  if (!/^video\//.test(b.type)) throw new Error('The video service did not return a video. Please try again.');
-  return URL.createObjectURL(b);
-}
-async function fillVideo(d, m) {
-  const body = d.querySelector('.body'), acts = d.querySelector('.acts2'), v = m.video;
-  body.classList.remove('cur'); acts.style.display = 'none';
-  acts.innerHTML = '<button class="icon vidre" title="Make it again">🔄 Make again</button><button class="icon viddl" title="Download">⬇ Download</button>';
-  const status = t => { body.innerHTML = `<div class="imgwrap"><div class="imgload"><div class="dots"><i></i><i></i><i></i></div>${esc(t)}</div></div>`; };
-  const fail = msg => { body.innerHTML = `<div class="imgwrap"><div class="err"><span>⚠️ ${esc(msg)}</span></div></div>`; acts.style.display = ''; v.running = false; };
-  const show = () => {
-    const n = v.clips.length; let i = 0;
-    body.innerHTML = '<div class="imgwrap"><video class="genvid" controls playsinline></video><div class="vidcap"></div></div>';
-    const el = body.querySelector('video'), cap = body.querySelector('.vidcap');
-    const load = k => { i = k; el.src = v.clips[k]; cap.textContent = n > 1 ? `Scene ${k + 1} of ${n}: ${v.scenes[k]}` : ''; };
-    el.onended = () => { if (i < n - 1) { load(i + 1); el.play(); } else load(0); }; // plays scenes in order, then rewinds
-    load(0); acts.style.display = ''; v.running = false;
-  };
-  if (v.clips) return show();
-  if (!v.fresh) return fail('This video was not saved. Tap "Make again" to create it again.');
-  if (v.running) return; v.running = true; v.fresh = false;
-  try {
-    let scenes = [v.prompt];
-    if (v.long) { status('Planning your scenes…'); scenes = await planScenes(v.prompt); }
-    const clips = [];
-    for (let k = 0; k < scenes.length; k++) { status(scenes.length > 1 ? `Making scene ${k + 1} of ${scenes.length}… this can take a minute each` : 'Making your video… this can take a minute'); clips.push(await fetchClip(scenes[k])); }
-    v.clips = clips; v.scenes = scenes; show();
-  } catch (e) { fail(e instanceof TypeError ? 'Network error. Check your internet connection.' : e.message); }
-}
-function downloadVideo(v) {
-  (v.clips || []).forEach((u, i) => setTimeout(() => { const a = document.createElement('a'); a.href = u; a.download = `aura-video-${i + 1}.mp4`; a.click(); }, i * 700));
-}
 
 // ---------- Slides viewer ----------
 function openDeck(text) {
@@ -512,8 +402,7 @@ function showAuth(msg, fatal) {
 }
 async function boot() {
   let cfg = {}; try { cfg = await (await fetch('/api/config')).json(); } catch {}
-  handlePollenReturn();
-  useCF = !!cfg.cf; videoMode = cfg.videoMode || ''; useVideo = !!videoMode; videoModel = cfg.videoModel || 'wan-fast'; appKey = cfg.pollenApp || '';
+  useCF = !!cfg.cf;
   if (cfg.supabaseUrl) {
     const wantGuest = sessionStorage.getItem('nova.guest') === '1';
     let session = null;
