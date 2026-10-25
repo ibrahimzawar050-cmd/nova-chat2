@@ -1,3 +1,4 @@
+import { isPlus } from '../lib/plan.mjs';
 // Zint AI image endpoint for Netlify: Cloudflare Workers AI (FLUX), with login/guest limits.
 const env = k => (globalThis.Netlify ? Netlify.env.get(k) : process.env[k]);
 const tokens = new Map(), hits = new Map();
@@ -25,7 +26,7 @@ export default async (req, context) => {
     if ((req.headers.get('authorization') || '').startsWith('Bearer ')) {
       const uid = await authUser(req, sbUrl, sbKey);
       if (!uid) return json({ error: 'Your login expired. Please refresh the page and log in again.' }, 401);
-      who = uid;
+      who = uid; if (await isPlus(req)) max = 40; // Zint AI Plus
     } else return json({ error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' }, 403);
   }
   if (limited(who + ':img', max)) return json({ error: 'Image limit reached. Please wait a few minutes and try again.' }, 429);

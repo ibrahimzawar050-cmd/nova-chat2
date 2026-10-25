@@ -1,3 +1,4 @@
+import { isPlus } from '../lib/plan.mjs';
 // Zint AI chat endpoint for Netlify: checks login (if enabled), calls Groq, streams the answer back.
 // The API key lives only in Netlify's environment variables, never in the browser.
 const env = k => (globalThis.Netlify ? Netlify.env.get(k) : process.env[k]);
@@ -16,6 +17,7 @@ const MODES = {
   poem: 'MODE: Poem writing. Write an ORIGINAL poem (never reproduce an existing poem). Pick a fitting form, such as free verse, rhyming couplets, a haiku sequence or a sonnet, unless the user names one. Give the poem a title, keep the language vivid, and add one short line at the end offering a different style or length.',
   slides: 'MODE: Slides. Create a presentation. Reply with one short intro sentence, then the slides. Start EVERY slide with a line beginning "## " followed by the slide title (use "## " for nothing else). Under each title put 3 to 5 short bullet points. Make the first slide a title slide and the last a summary or next steps.',
   research: 'MODE: Deep research. You have NO live web access, so write a thorough, well-structured report from your own knowledge: summary, key facts, different viewpoints, open questions, and a section "What to double-check". Be clear about uncertainty. Never invent sources, links, quotes or statistics.',
+  live: 'MODE: Live information. Fresh web search results are provided below. Answer from them, say where the information came from, and say plainly if the results do not answer the question. Never invent scores, prices or facts.',
   learn: 'MODE: Guided learning. Be a patient Socratic tutor. Do not dump the full answer at once. Begin by asking one short question about what the learner already knows, then teach in small steps: explain one idea, then ask one check question. Give hints instead of answers when they are stuck, praise effort, and finish with a short recap and an offer of a quick quiz.'
 };
 const sys = mode => SYSTEM() + (MODES[mode] ? '\n\n' + MODES[mode] : '');
@@ -70,7 +72,7 @@ export default async (req, context) => {
     if ((req.headers.get('authorization') || '').startsWith('Bearer ')) {
       const uid = await authUser(req, sbUrl, sbKey);
       if (!uid) return json({ error: 'Your login expired. Please refresh the page and log in again.' }, 401);
-      who = uid;
+      who = uid; if (await isPlus(req)) max = 150; // Zint AI Plus: higher limit
     } else { who = 'guest:' + who; max = 15; isGuest = true; } // guests: no login, lower limit
   }
   if (limited(who, max)) return json({ error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' }, 429);
@@ -84,12 +86,25 @@ export default async (req, context) => {
     if (!messages.length || messages[0].role !== 'user') throw new Error('Invalid conversation');
   } catch (e) { return json({ error: e.message || 'Bad request' }, 400); }
 
+  let system = sys(mode);
+  if (mode === 'live') { // free web search (Tavily) so the answer can use live information
+    const q = [...messages].reverse().find(m => m.role === 'user');
+    const text = q ? (typeof q.content === 'string' ? q.content : q.content.filter(p => p.type === 'text').map(p => p.text).join(' ')) : '';
+    if (!env('TAVILY_API_KEY')) return json({ error: 'Live information is not switched on yet.' }, 501);
+    if (!(await isPlus(req))) return json({ error: 'Live info is for Zint AI Plus members.' }, 403);
+    try {
+      const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { Authorization: 'Bearer ' + env('TAVILY_API_KEY'), 'content-type': 'application/json' }, body: JSON.stringify({ query: text.slice(0, 300), max_results: 5, include_answer: true }), signal: AbortSignal.timeout(15000) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error('search');
+      system += `\n\nSEARCH RESULTS (${new Date().toUTCString()}):\n` + (j.answer ? `Summary: ${j.answer}\n` : '') + (j.results || []).map((x, i) => `[${i + 1}] ${x.title} (${x.url})\n${String(x.content || '').slice(0, 600)}`).join('\n');
+    } catch { return json({ error: 'The live search did not work. Please try again in a moment.' }, 502); }
+  }
   const base = env('GROQ_BASE_URL') || 'https://api.groq.com/openai/v1';
   const call = model => fetch(base + '/chat/completions', {
     method: 'POST', signal: req.signal,
     headers: { Authorization: 'Bearer ' + key, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model, max_tokens: 4096, stream: true, messages: [{ role: 'system', content: sys(mode) }, ...messages],
+      model, max_tokens: 4096, stream: true, messages: [{ role: 'system', content: system }, ...messages],
       ...(model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {})
     })
   });

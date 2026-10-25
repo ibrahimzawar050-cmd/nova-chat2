@@ -125,3 +125,11 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 
 .photo{display:block;max-width:240px;max-height:240px;width:100%;object-fit:cover;border-radius:12px;margin-bottom:8px}
 .thumb{width:28px;height:28px;object-fit:cover;border-radius:6px}
+
+.upgrade{display:block;width:100%;text-align:left;padding:10px;border-radius:10px;font-weight:600;color:#7a4b00;background:#ffe9a8}.upgrade:hover{filter:brightness(.97)}
+.plusbg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}.plusbg[hidden]{display:none}
+.plusbox{position:relative;background:var(--bg,#fff);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:380px;width:100%}
+.plusbox h2{margin:0 0 10px}.plusbox ul{padding-left:0;list-style:none;display:grid;gap:8px;margin:0 0 12px}.plusbox .small{font-size:12px;color:var(--mute)}
+.plusbox #plusX{position:absolute;right:12px;top:12px}.plusgo{width:100%;padding:12px;border-radius:12px;background:#f5b400;color:#222;font-weight:700}.plusgo:disabled{opacity:.6}
+.plusbadge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:99px;background:#ffe9a8;color:#7a4b00;font-size:11px;font-weight:700}
+.plusbox .price{font-size:22px;margin:0 0 6px}

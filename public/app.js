@@ -14,10 +14,10 @@ const SUGGESTIONS = [
   ['Translate to Spanish', '"Where is the train station?"'], ['Create an image', 'a cat astronaut on the moon']
 ];
 
-let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
+let plus = false, videoOn = false, liveOn = false, chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 // Saves to the browser (local mode) or to the user's cloud account (login mode).
-const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m.photo ? { ...m, photo: { name: m.photo.name } } : m; // never store the picture bytes
+const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m.photo ? { ...m, photo: { name: m.photo.name } } : m.video ? { ...m, video: { prompt: m.video.prompt, secs: m.video.secs, id: m.video.id } } : m; // never store the picture bytes
 const save = c => {
   if (guest) return; // guests: nothing is saved
   if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats.map(x => ({ ...x, messages: x.messages.map(strip) })))); } catch {} return; }
@@ -92,7 +92,7 @@ function msgEl(m, i) {
     }
   } else {
     d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button><button class="icon pres" title="Show as slides" style="display:none">▶ Present</button></div></div>`;
-    m.image ? fillImage(d, m) : fillAI(d, m, false);
+    m.image ? fillImage(d, m) : m.video ? fillVideo(d, m) : fillAI(d, m, false);
   }
   return d;
 }
@@ -145,6 +145,7 @@ function setBusy(b) {
 async function send(text) {
   text = (text ?? $('#input').value).trim();
   if (busy || (!text && !file)) return;
+  if (!file && /^video\d+$/.test(mode || '')) return makeVideo(text, +mode.slice(5));
   if (!file && (mode === 'image' || /^\/image\s+/i.test(text))) return makeImage(text);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
@@ -218,7 +219,7 @@ $('#attach').onclick = () => $('#file').click();
 const shrink = f => new Promise((ok, fail) => {
   const u = URL.createObjectURL(f), im = new Image();
   im.onload = () => {
-    const k = Math.min(1, 1280 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+    const k = Math.min(1, (plus ? 2048 : 1280) / Math.max(im.width, im.height)), cv = document.createElement('canvas');
     cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
     const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height); x.drawImage(im, 0, 0, cv.width, cv.height);
     URL.revokeObjectURL(u); ok(cv.toDataURL('image/jpeg', 0.8));
@@ -277,6 +278,10 @@ const MODES = {
   write:    { icon: '✍️', label: 'Write', sub: 'Essays, emails, stories, speeches', hint: 'What should I write?' },
   slides:   { icon: '📊', label: 'Make slides', sub: 'A presentation you can play full screen', hint: 'What is the presentation about?' },
   research: { icon: '🔎', label: 'Deep research', sub: 'Thorough report (no live web search)', hint: 'What should I research?' },
+  live:     { icon: '🌐', label: 'Live info', sub: 'Scores, news and facts from the web right now (Plus members)', hint: 'Ask about scores, news, weather…', live: true, plus: true },
+  video5:   { icon: '🎬', label: '5-second video', sub: 'A short video clip (Plus members)', hint: 'Describe the video you want…', plus: true },
+  video10:  { icon: '🎬', label: '10-second video', sub: 'A longer clip (Plus members)', hint: 'Describe the video you want…', plus: true },
+  video20:  { icon: '🎬', label: '20-second video', sub: 'The longest clip (Plus members)', hint: 'Describe the video you want…', plus: true },
   learn:    { icon: '🎓', label: 'Guided learning', sub: 'Learn step by step with questions', hint: 'What do you want to learn?' }
 };
 function setMode(m) {
@@ -292,10 +297,11 @@ function setMode(m) {
 function buildTools() {
   const t = $('#tools'); t.innerHTML = '';
   Object.entries(MODES).forEach(([k, v]) => {
-    const locked = guest; // guests cannot use any tool
+    if ((v.live && !liveOn) || (v.plus && !v.live && !videoOn)) return;
+    const needPlus = v.plus && !guest && !plus, locked = guest || needPlus; // guests cannot use any tool
     const b = document.createElement('button'); b.className = 'tool' + (k === mode ? ' on' : '') + (locked ? ' lock' : '');
-    b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(locked ? 'Log in to use this' : v.sub)}</small></span>`;
-    b.onclick = () => locked ? (t.hidden = true, alert(GUEST_IMG_MSG)) : setMode(k === mode ? null : k);
+    b.innerHTML = `<span class="ti">${v.icon}</span><span><b>${esc(v.label)}${locked ? ' 🔒' : ''}</b><small>${esc(guest ? 'Log in to use this' : needPlus ? 'Plus members only' : v.sub)}</small></span>`;
+    b.onclick = () => locked ? (t.hidden = true, needPlus ? ($('#plus').hidden = false) : alert(GUEST_IMG_MSG)) : setMode(k === mode ? null : k);
     t.appendChild(b);
   });
 }
@@ -331,6 +337,46 @@ function makeImage(prompt) {
   c.messages.push({ role: 'assistant', content: `(Zint AI created an image of: ${prompt})`, image: { prompt, seed: Math.floor(Math.random() * 1e6), cf: useCF, fresh: true } });
   c.updated = Date.now(); $('#input').value = ''; autosize();
   save(c); renderList(); renderChat();
+}
+function makeVideo(prompt, secs) {
+  prompt = prompt.trim().slice(0, 500);
+  if (busy || !prompt) return;
+  setMode(null);
+  let c = chat();
+  if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
+  if (!c.messages.length) c.title = ('🎬 ' + prompt).slice(0, 40);
+  c.messages.push({ role: 'user', content: `🎬 Make a ${secs}-second video: ` + prompt });
+  c.messages.push({ role: 'assistant', content: `(Zint AI made a ${secs}-second video of: ${prompt})`, video: { prompt, secs, fresh: true } });
+  c.updated = Date.now(); $('#input').value = ''; autosize();
+  save(c); renderList(); renderChat();
+}
+async function fillVideo(d, m) {
+  const body = d.querySelector('.body'), acts = d.querySelector('.acts2');
+  body.classList.remove('cur'); acts.style.display = 'none';
+  const fail = msg => { body.innerHTML = `<div class="imgwrap"><div class="err"><span>⚠️ ${esc(msg)}</span></div></div>`; };
+  const show = url => { body.innerHTML = '<div class="imgwrap"><video class="genimg" controls playsinline></video></div>'; body.querySelector('video').src = url; };
+  if (m.video.url) return show(m.video.url);
+  if (!m.video.id && !m.video.fresh) return fail('This video was not saved. Make it again from the tools menu.');
+  m.video.fresh = false;
+  const mins = Math.max(1, Math.round(m.video.secs / 5 * 1.5));
+  body.innerHTML = `<div class="imgwrap"><div class="imgload"><div class="dots"><i></i><i></i><i></i></div>Making your ${m.video.secs}-second video… this can take about ${mins} to ${mins + 3} minutes. Please keep this page open.</div></div>`;
+  try {
+    let id = m.video.id;
+    if (!id) {
+      const res = await fetch('/api/video', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ prompt: m.video.prompt, secs: m.video.secs }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.id) throw new Error(j.error || 'Video error');
+      id = m.video.id = j.id; save(chat());
+    }
+    for (let n = 0; n < 150; n++) { // check every 4 seconds for up to 10 minutes
+      await new Promise(r => setTimeout(r, 4000));
+      if (!d.isConnected) return; // chat was changed
+      const res = await fetch('/api/video?id=' + id, { headers: await authHeaders() }), s = await res.json().catch(() => ({}));
+      if (s.state === 'done') { m.video.url = s.url; return show(s.url); }
+      if (s.state === 'failed' || res.status === 404 || res.status === 403) throw new Error(s.error || 'Video error');
+    }
+    throw new Error('The video is taking too long. Please try again.');
+  } catch (e) { fail(e instanceof TypeError ? 'Network error. Check your internet connection.' : e.message); }
 }
 async function fillImage(d, m) {
   const body = d.querySelector('.body'), acts = d.querySelector('.acts2');
@@ -443,6 +489,8 @@ async function boot() {
       const { data: rows, error } = await sb.from('chats').select('id,title,messages,updated').order('updated', { ascending: false });
       if (error) alert('Could not load your chats: ' + error.message);
       chats = rows || [];
+      videoOn = !!cfg.video; liveOn = !!cfg.live;
+      setupPlus(cfg.pay, session);
     } else if (wantGuest) {
       sb = null; guest = true;
       $('#user').hidden = false; $('#userEmail').textContent = 'Guest · chats are not saved';
@@ -455,6 +503,38 @@ async function boot() {
   setBusy(false); renderList(); renderChat();
 }
 boot();
+
+// ---------- Zint AI Plus ----------
+async function authHeader() { const { data } = await sb.auth.getSession(); return data.session ? { Authorization: 'Bearer ' + data.session.access_token, 'Content-Type': 'application/json' } : null; }
+async function loadPlan() { try { const { data } = await sb.from('plans').select('plus').maybeSingle(); plus = !!(data && data.plus); } catch { plus = false; } showPlus(); }
+function showPlus() {
+  $('#upgradeLabel').textContent = plus ? 'Manage Plus' : 'Upgrade to Plus';
+  const e = $('#userEmail'), old = e.querySelector('.plusbadge'); if (old) old.remove();
+  if (plus) e.insertAdjacentHTML('beforeend', '<span class="plusbadge">Plus</span>');
+}
+async function goStripe(path, btn) {
+  const h = await authHeader(); if (!h) return location.reload();
+  btn.disabled = true; $('#plusMsg').textContent = '';
+  try {
+    const r = await fetch(path, { method: 'POST', headers: h }), j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.url) throw new Error(j.error || 'Something went wrong. Please try again.');
+    location.href = j.url;
+  } catch (e) { $('#plusMsg').textContent = '⚠️ ' + e.message; btn.disabled = false; }
+}
+function setupPlus(pay, session) {
+  if (!pay) return;
+  $('#upgrade').hidden = false;
+  $('#upgrade').onclick = () => plus ? goStripe('/api/portal', $('#upgrade')) : ($('#plus').hidden = false);
+  $('#plusX').onclick = () => $('#plus').hidden = true;
+  $('#plus').onclick = e => { if (e.target.id === 'plus') $('#plus').hidden = true; };
+  $('#plusGo').onclick = () => goStripe('/api/checkout', $('#plusGo'));
+  loadPlan();
+  if (new URLSearchParams(location.search).get('plus') === 'ok') {
+    history.replaceState(null, '', '/');
+    alert('Thank you! Your Plus is being switched on. It can take a few seconds.');
+    let n = 0; const t = setInterval(async () => { await loadPlan(); if (plus || ++n > 10) clearInterval(t); }, 2000);
+  }
+}
 
 // ---------- Install as an app ----------
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

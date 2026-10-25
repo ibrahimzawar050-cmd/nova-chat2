@@ -18,6 +18,22 @@
 <body>
 <div id="auth" class="auth" hidden></div>
 <div id="deck" class="deck" hidden></div>
+<div id="plus" class="plusbg" hidden><div class="plusbox">
+  <button id="plusX" class="mini" title="Close">✕</button>
+  <h2>⭐ Zint AI Plus</h2>
+  <ul>
+    <li>💬 More messages (150 every 10 minutes instead of 40)</li>
+    <li>🎨 More images (40 every 10 minutes instead of 10)</li>
+    <li>🌐 Live info: scores, news and facts from the web</li>
+    <li>🎬 Videos: 5, 10 and 20 seconds</li>
+    <li>📷 Sharper photo reading</li>
+    <li>⭐ A Plus badge next to your name</li>
+  </ul>
+  <p class="price"><b>£15</b> / month</p>
+  <p class="small">You pay on Stripe's safe payment page. You can cancel any time.</p>
+  <button id="plusGo" class="plusgo">Continue to payment</button>
+  <p id="plusMsg" class="small"></p>
+</div></div>
 <div class="app">
   <aside id="side">
     <div class="brand"><span class="logo"></span>Zint AI</div>
@@ -26,6 +42,7 @@
     </button>
     <div id="list" class="list"></div>
     <div id="user" class="userbox" hidden><span id="userEmail"></span><button id="logout" class="mini" title="Log out">Log out</button></div>
+    <button id="upgrade" class="upgrade" hidden>⭐ <span id="upgradeLabel">Upgrade to Plus</span></button>
     <button id="install" class="ghost" hidden>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
       <span>Install app</span>
