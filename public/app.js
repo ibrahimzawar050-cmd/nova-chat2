@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 let chats = [], cur = null, busy = false, ctrl = null, file = null, sb = null, guest = false, warned = false;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 // Saves to the browser (local mode) or to the user's cloud account (login mode).
-const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m; // never store the picture bytes
+const strip = m => m.image ? { ...m, image: { prompt: m.image.prompt, seed: m.image.seed, cf: m.image.cf } } : m.photo ? { ...m, photo: { name: m.photo.name } } : m; // never store the picture bytes
 const save = c => {
   if (guest) return; // guests: nothing is saved
   if (!sb) { try { localStorage.setItem('nova.chats', JSON.stringify(chats.map(x => ({ ...x, messages: x.messages.map(strip) })))); } catch {} return; }
@@ -86,7 +86,10 @@ function msgEl(m, i) {
   if (m.role === 'user') {
     d.innerHTML = '<div class="bubble"></div>';
     d.firstChild.textContent = m.content;
-    if (m.file) d.firstChild.insertAdjacentHTML('afterbegin', `<div class="file">📎 ${esc(m.file.name)}</div>`);
+    if (m.photo) {
+      if (m.photo.data) { const im = document.createElement('img'); im.className = 'photo'; im.alt = m.photo.name; im.src = m.photo.data; d.firstChild.prepend(im); }
+      else d.firstChild.insertAdjacentHTML('afterbegin', `<div class="file">📷 ${esc(m.photo.name)} (photo not saved)</div>`);
+    }
   } else {
     d.innerHTML = `<div class="av"></div><div class="bubble"><div class="body"></div><div class="acts2"><button class="icon cp" title="Copy response">${ICON.copy}</button><button class="icon rd" title="Read aloud">${ICON.spk}</button><button class="icon pres" title="Show as slides" style="display:none">▶ Present</button></div></div>`;
     m.image ? fillImage(d, m) : fillAI(d, m, false);
@@ -145,14 +148,22 @@ async function send(text) {
   if (!file && (mode === 'image' || /^\/image\s+/i.test(text))) return makeImage(text);
   let c = chat();
   if (!c) { c = { id: uid(), title: 'New chat', messages: [], updated: Date.now() }; chats.push(c); cur = c.id; localStorage.setItem('nova.cur', cur); }
-  const m = { role: 'user', content: text || 'Please look at the attached file.' };
-  if (file) { m.file = file; file = null; $('#chip').hidden = true; }
-  if (!c.messages.length) c.title = (text || m.file.name).slice(0, 40);
+  const m = { role: 'user', content: text || 'What is in this photo?' };
+  if (file) { m.photo = file; file = null; $('#chip').hidden = true; }
+  if (!c.messages.length) c.title = (text || 'Photo').slice(0, 40);
   c.messages.push(m);
   $('#input').value = ''; autosize();
   generate(c);
 }
-const apiText = m => m.file ? `${m.content}\n\n[Attached file: ${m.file.name}]\n\`\`\`\n${m.file.text}\n\`\`\`` : m.content;
+// Photos are sent only for the 3 newest ones; older or reloaded photos become a short note.
+function apiMsgs(list) {
+  const withData = list.filter(m => m.photo && m.photo.data).slice(-3);
+  return list.map(m => {
+    if (m.photo && withData.includes(m)) return { role: m.role, content: [{ type: 'text', text: m.content }, { type: 'image_url', image_url: { url: m.photo.data } }] };
+    if (m.photo) return { role: m.role, content: `${m.content}\n\n[The user attached a photo named "${m.photo.name}", which is no longer available.]` };
+    return { role: m.role, content: m.content };
+  });
+}
 
 async function generate(c) {
   stopSpeaking();
@@ -163,7 +174,7 @@ async function generate(c) {
   const paint = () => { raf = 0; const near = $('#scroll').scrollHeight - $('#scroll').scrollTop - $('#scroll').clientHeight < 140; fillAI(el, ai, true); if (near) $('#scroll').scrollTop = 1e9; };
   ctrl = new AbortController();
   try {
-    const history = c.messages.slice(0, -1).filter(m => m.role === 'user' || m.content).map(m => ({ role: m.role, content: apiText(m) }));
+    const history = apiMsgs(c.messages.slice(0, -1).filter(m => m.role === 'user' || m.content));
     const headers = { 'Content-Type': 'application/json' };
     if (sb) {
       const { data } = await sb.auth.getSession();
@@ -203,11 +214,26 @@ $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shift
 $('#send').onclick = () => busy ? stop() : send();
 $('#new').onclick = () => { newChat(); closeSide(); };
 $('#attach').onclick = () => $('#file').click();
+// Shrink the photo so it uploads fast and fits the free AI limits
+const shrink = f => new Promise((ok, fail) => {
+  const u = URL.createObjectURL(f), im = new Image();
+  im.onload = () => {
+    const k = Math.min(1, 1280 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+    const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height); x.drawImage(im, 0, 0, cv.width, cv.height);
+    URL.revokeObjectURL(u); ok(cv.toDataURL('image/jpeg', 0.8));
+  };
+  im.onerror = () => { URL.revokeObjectURL(u); fail(); };
+  im.src = u;
+});
 $('#file').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  if (f.size > 200000) return alert('Please choose a text file under 200 KB.');
-  file = { name: f.name, text: await f.text() };
-  const ch = $('#chip'); ch.hidden = false; ch.innerHTML = `📎 ${esc(f.name)} <button class="mini" title="Remove">✕</button>`;
+  if (!f.type.startsWith('image/')) return alert('Please choose a photo (JPG, PNG or WebP).');
+  if (f.size > 25e6) return alert('That photo is too big. Please choose one under 25 MB.');
+  let data; try { data = await shrink(f); } catch { return alert('Sorry, that photo could not be opened. Try a JPG or PNG.'); }
+  file = { name: f.name, data };
+  const ch = $('#chip'); ch.hidden = false; ch.innerHTML = `<img class="thumb" alt=""> ${esc(f.name)} <button class="mini" title="Remove">✕</button>`;
+  ch.querySelector('.thumb').src = data;
   ch.querySelector('button').onclick = () => { file = null; ch.hidden = true; autosize(); };
   autosize(); $('#input').focus();
 };

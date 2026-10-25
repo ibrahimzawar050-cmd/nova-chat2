@@ -20,6 +20,30 @@ const MODES = {
 };
 const sys = mode => SYSTEM() + (MODES[mode] ? '\n\n' + MODES[mode] : '');
 
+
+// Accepts plain text, or text + photos (data URLs). Returns cleaned messages and whether any photo is present.
+const VISION_MODEL = env('VISION_MODEL') || 'qwen/qwen3.8-27b';
+const PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+function cleanMessages(list) {
+  let imgs = 0;
+  const out = list.slice(-40).filter(m => m && (m.role === 'user' || m.role === 'assistant')).map(m => {
+    if (typeof m.content === 'string') return { role: m.role, content: m.content };
+    if (m.role !== 'user' || !Array.isArray(m.content)) return null;
+    const parts = [];
+    for (const p of m.content) {
+      if (p && p.type === 'text' && typeof p.text === 'string') parts.push({ type: 'text', text: p.text });
+      else if (p && p.type === 'image_url' && p.image_url && typeof p.image_url.url === 'string') {
+        if (p.image_url.url.length > 3e6 || !PHOTO.test(p.image_url.url)) throw new Error('That photo could not be used. Please try a JPG or PNG.');
+        if (++imgs > 3) throw new Error('Please send at most 3 photos at a time.');
+        parts.push({ type: 'image_url', image_url: { url: p.image_url.url } });
+      }
+    }
+    return parts.length ? { role: 'user', content: parts } : null;
+  }).filter(m => m && (typeof m.content !== 'string' || m.content.trim()));
+  return { messages: out, hasImg: imgs > 0 };
+}
+const toAnthropic = messages => messages.map(m => typeof m.content === 'string' ? m : { role: m.role, content: m.content.map(p => p.type === 'text' ? p : { type: 'image', source: { type: 'base64', media_type: p.image_url.url.slice(5, p.image_url.url.indexOf(';')), data: p.image_url.url.slice(p.image_url.url.indexOf(',') + 1) } }) });
+
 async function authUser(req, url, key) {
   const t = (req.headers.get('authorization') || '').replace(/^Bearer /, '');
   if (!t) return null;
@@ -51,14 +75,12 @@ export default async (req, context) => {
   }
   if (limited(who, max)) return json({ error: max === 15 ? 'Guest limit reached. Please wait a few minutes, or log in for more messages.' : 'You are sending messages very fast. Please wait a few minutes.' }, 429);
 
-  let messages, mode;
+  let messages, mode, hasImg = false;
   try {
     const body = await req.json();
     mode = typeof body.mode === 'string' ? body.mode : null;
     if (isGuest && MODES[mode]) return json({ error: 'Please log in to use the tools. Guests can chat, but the tools menu is for people with an account.' }, 403);
-    messages = (body.messages || []).slice(-40)
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
-      .map(m => ({ role: m.role, content: m.content }));
+    ({ messages, hasImg } = cleanMessages(body.messages || []));
     if (!messages.length || messages[0].role !== 'user') throw new Error('Invalid conversation');
   } catch (e) { return json({ error: e.message || 'Bad request' }, 400); }
 
@@ -73,7 +95,7 @@ export default async (req, context) => {
   });
   let up;
   try {
-    const tries = env('MODEL') ? [env('MODEL')] : MODELS;
+    const tries = hasImg ? [VISION_MODEL] : env('MODEL') ? [env('MODEL')] : MODELS;
     for (const m of tries) { // Groq's free models change, so try the next one if a model is unavailable
       up = await call(m);
       if (up.ok || ![400, 403, 404].includes(up.status)) break;
@@ -85,6 +107,7 @@ export default async (req, context) => {
     try { msg = (await up.json()).error.message || msg; } catch {}
     if (up.status === 401) msg = 'The AI key is invalid. Check GROQ_API_KEY in Netlify.';
     if (up.status === 429) msg = 'Free-tier rate limit reached. Please wait a minute and try again.';
+    if (hasImg && [400, 403, 404].includes(up.status) && /model/i.test(msg)) msg = 'Reading photos is not available right now. Please try again later, or ask your question in words.';
     return json({ error: msg }, 502);
   }
 

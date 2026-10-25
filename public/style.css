@@ -122,3 +122,6 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 .deckbar button{padding:8px 16px;border-radius:12px;border:1px solid var(--line);background:var(--card)}.deckbar button:hover{border-color:var(--accent)}
 
 .tools{max-height:70vh;overflow:auto}
+
+.photo{display:block;max-width:240px;max-height:240px;width:100%;object-fit:cover;border-radius:12px;margin-bottom:8px}
+.thumb{width:28px;height:28px;object-fit:cover;border-radius:6px}
