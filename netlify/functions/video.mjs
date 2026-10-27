@@ -50,7 +50,12 @@ export default async req => {
   try {
     const r = await luma('/generations', L, { prompt, ...settings(), duration: '5s' });
     const g = await r.json().catch(() => ({}));
-    if (!r.ok || !g.id) { await undo(); return json({ error: r.status === 402 || r.status === 429 ? 'The video service is out of credit or busy. Please try again later.' : 'The video service could not start. Please try again.' }, 502); }
+    if (!r.ok || !g.id) {
+      await undo();
+      const why = String(g.detail && g.detail.message || g.detail || g.error || g.message || '').slice(0, 200);
+      console.log('Luma refused:', r.status, JSON.stringify(g).slice(0, 400));
+      return json({ error: (r.status === 402 || r.status === 429 ? 'The video service is out of credit or busy. Please try again later.' : 'The video service could not start.') + ` (Luma said ${r.status}${why ? ': ' + why : ''})` }, 502);
+    }
     await sb('videos?id=eq.' + row.id, 'PATCH', { gen_id: g.id });
     return json({ id: row.id });
   } catch { await undo(); return json({ error: 'The video service did not respond. Please try again.' }, 502); }
