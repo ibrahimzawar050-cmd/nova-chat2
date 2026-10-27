@@ -1,7 +1,8 @@
 // Zint AI Plus video maker (Luma). Plus members only, with daily limits so the bill can never run away.
-// 5s = 1 clip; 10s = 2 clips joined with Luma's "extend"; 20s = 4 clips. Each clip counts as 1 unit toward the daily limits.
+// Uses Luma's current API (agents.lumalabs.ai, keys start with luma-api-). 5s and 10s = one clip; 20s = a 10s clip plus two 5s "extend" clips.
+// Each 5 seconds counts as 1 unit toward the limits.
 import { env, json, sbUrl, whoIs, isPlus } from '../lib/plan.mjs';
-const LUMA = 'https://api.lumalabs.ai/dream-machine/v1';
+const LUMA = (env('LUMA_BASE_URL') || 'https://agents.lumalabs.ai/v1').replace(/\/$/, '');
 const svc = () => env('SUPABASE_SERVICE_KEY');
 const sb = (path, method = 'GET', body, extra = {}) => fetch(sbUrl() + '/rest/v1/' + path, {
   method, headers: { apikey: svc(), Authorization: 'Bearer ' + svc(), 'content-type': 'application/json', ...extra }, body: body ? JSON.stringify(body) : undefined
@@ -13,7 +14,10 @@ async function used(filter, from) { // clip units started since `from` (if unsur
   return r.ok ? (await r.json()).reduce((a, x) => a + (x.units || 1), 0) : 1e9;
 }
 const luma = (path, L, body) => fetch(LUMA + path, { method: body ? 'POST' : 'GET', headers: L, body: body ? JSON.stringify(body) : undefined });
-const settings = () => ({ model: env('VIDEO_MODEL') || 'ray-3.2', resolution: env('VIDEO_RES') || '540p', aspect_ratio: '16:9' });
+const base = prompt => ({ model: env('VIDEO_MODEL') || 'ray-3.2', type: 'video', prompt, aspect_ratio: '16:9' });
+const res = () => env('VIDEO_RES') || '540p';
+const startBody = (prompt, secs) => ({ ...base(prompt), video: { resolution: res(), duration: secs + 's' } });
+const extendBody = (prompt, id) => ({ ...base(prompt), video: { resolution: res(), start_frame: { generation_id: id } } });
 
 export default async req => {
   if (!env('LUMA_API_KEY') || !svc() || !sbUrl()) return json({ error: 'Video is not switched on yet.' }, 501);
@@ -29,10 +33,11 @@ export default async req => {
     const r = await luma('/generations/' + encodeURIComponent(row.gen_id), L).catch(() => null);
     const g = r && r.ok ? await r.json().catch(() => ({})) : {};
     if (g.state === 'failed') return json({ state: 'failed', error: 'The video could not be made. Try a different idea.' });
-    if (g.state !== 'completed' || !(g.assets && g.assets.video)) return json({ state: 'working' });
-    if (!(row.remaining > 0)) return json({ state: 'done', url: g.assets.video });
+    const url = g.output && g.output[0] && g.output[0].url;
+    if (g.state !== 'completed' || !url) return json({ state: 'working' });
+    if (!(row.remaining > 0)) return json({ state: 'done', url });
     // next clip: continue from the one that just finished
-    const nx = await luma('/generations', L, { prompt: row.prompt, ...settings(), keyframes: { frame0: { type: 'generation', id: row.gen_id } } }).catch(() => null);
+    const nx = await luma('/generations', L, extendBody(row.prompt, row.gen_id)).catch(() => null);
     const ng = nx && nx.ok ? await nx.json().catch(() => ({})) : {};
     if (!ng.id) return json({ state: 'failed', error: 'The video could not be made. Try again.' });
     await sb(`videos?id=eq.${id}&gen_id=eq.${encodeURIComponent(row.gen_id)}`, 'PATCH', { gen_id: ng.id, remaining: row.remaining - 1 }); // only one poll wins
@@ -44,11 +49,11 @@ export default async req => {
   const units = secs / 5, perUser = Number(env('VIDEO_MONTHLY')) || 20, global = Number(env('VIDEO_GLOBAL_DAILY')) || 40;
   if ((await used(`&user_id=eq.${u.id}`, monthStart())) + units > perUser) return json({ error: 'You have used all your videos for this month. They come back on the 1st.' }, 429);
   if ((await used('', dayAgo())) + units > global) return json({ error: 'Zint AI has made all of its videos for today. Please try again tomorrow.' }, 429);
-  const ins = await sb('videos', 'POST', { user_id: u.id, prompt, units, remaining: units - 1 }, { Prefer: 'return=representation' }); // counted before paying Luma
+  const ins = await sb('videos', 'POST', { user_id: u.id, prompt, units, remaining: secs === 20 ? 2 : 0 }, { Prefer: 'return=representation' }); // counted before paying Luma
   const row = ins.ok ? (await ins.json())[0] : null; if (!row) return json({ error: 'Could not start the video. Please try again.' }, 502);
   const undo = () => sb('videos?id=eq.' + row.id, 'DELETE');
   try {
-    const r = await luma('/generations', L, { prompt, ...settings(), duration: '5s' });
+    const r = await luma('/generations', L, startBody(prompt, secs === 5 ? 5 : 10));
     const g = await r.json().catch(() => ({}));
     if (!r.ok || !g.id) {
       await undo();

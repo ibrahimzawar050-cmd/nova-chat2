@@ -33,17 +33,19 @@ Log in -> "Upgrade to Plus" appears in the sidebar -> pay with Stripe's test car
 and swaps in the live keys, price id and a new live webhook secret.
 
 ## 5. Videos for Plus members (Luma) - this part costs real money, so dad does it
-1. Dad makes an account at https://lumalabs.ai, then opens https://platform.lumalabs.ai, adds a small prepaid amount
+1. Dad makes an account at https://lumalabs.ai, then opens https://platform.lumalabs.ai (the key must start with luma-api-), adds a small prepaid amount
    (for example 5 pounds) and makes an API key. Turn auto top-up OFF so it can never spend more than he put in.
 2. Supabase: SQL Editor -> New query -> paste the "Zint AI Plus videos" part of supabase.sql -> Run.
 3. Netlify variable (tick "Contains secret values"): LUMA_API_KEY = the key. (SUPABASE_SERVICE_KEY from step 3 is also needed.)
 4. Optional Netlify variables: VIDEO_MONTHLY (clips per person per MONTH, resets on the 1st, default 20 = five 20-second videos),
    VIDEO_GLOBAL_DAILY (clips for EVERYONE per day, a safety net, default 40), VIDEO_MODEL (default ray-3.2), VIDEO_RES (default 540p).
 5. Deploy. Plus members now see 5-second, 10-second and 20-second videos in the tools menu.
-A 10-second video = 2 clips joined, 20-second = 4 clips joined (Luma "extend"). One clip is what Luma charges for.
+5s and 10s videos are one clip; a 20-second video is a 10s clip plus two 5s extends. Luma charges by seconds made.
 If nobody has Plus, nobody can make a video, so Luma is never charged.
 
 ## 6. Live info (free)
 1. Go to https://tavily.com, make a free account and copy the API key (free plan has about 1,000 searches a month).
 2. Netlify variable (tick "Contains secret values"): TAVILY_API_KEY = the key. Deploy.
 3. Plus members now see "Live info" in the tools menu (scores, news, facts from the web). It is a Plus perk.
+
+NOTE (Luma): Luma's new API is used. The key must start with luma-api- (platform.lumalabs.ai). 5s and 10s videos are one clip; a 20-second video is a 10s clip plus two 5s extends.
