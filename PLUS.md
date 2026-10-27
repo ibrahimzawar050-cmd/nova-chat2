@@ -10,7 +10,7 @@ Then Project Settings -> API Keys -> copy the SECRET key (service_role). Never s
 
 ## 2. Stripe (dad)
 1. Make a Stripe account and finish "Activate payments". Start in Test mode.
-2. Product catalogue -> Add product "Zint AI Plus" -> Recurring, monthly, set the price to 15 pounds a month (the Plus page says 15 pounds, so they must match) -> Save.
+2. Product catalogue -> Add product "Zint AI Plus" -> Recurring, monthly, set the price to 8.37 pounds a month (the Plus page says 8.37 pounds, so they must match) -> Save.
    Open it and copy the Price ID (starts with `price_`).
 3. Developers -> API keys -> copy the Secret key (starts with `sk_`).
 4. Settings -> Billing -> Customer portal -> turn it on (lets people cancel).
