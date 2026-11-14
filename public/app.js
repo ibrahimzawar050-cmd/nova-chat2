@@ -457,7 +457,7 @@ function showAuth(msg, fatal) {
   a.innerHTML = `<div class="card"><span class="logo"></span><h2>Welcome to Zint AI</h2><p>Log in so your chats are saved to your own account and open on any device.</p>
     ${fatal ? '' : '<input id="em" type="email" placeholder="Email" autocomplete="email"><input id="pw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="row"><button id="li" class="new">Log in</button><button id="su" class="alt">Create account</button></div>'}
     <div id="aerr" class="aerr"></div>
-    <button id="gu" class="alt">Continue as guest</button><small class="gnote">Guests can chat, but chats are not saved and disappear when you refresh.</small></div>`;
+    <button id="gu" class="alt">Continue as guest</button><small class="gnote">Guests can chat, but chats are not saved and disappear when you refresh.</small><a class="ghost help authhelp" href="mailto:zintaiyoursmartcompanion@gmail.com" title="Email Zint AI support"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 014.9.8c0 1.7-2.4 2.2-2.4 3.7M12 17h.01"/></svg><span>Need help? Email us</span></a></div>`;
   const err = t => $('#aerr').textContent = t; if (msg) err(msg);
   $('#gu').onclick = () => { sessionStorage.setItem('nova.guest', '1'); location.reload(); };
   if (fatal) return;

@@ -133,3 +133,5 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 .plusbox #plusX{position:absolute;right:12px;top:12px}.plusgo{width:100%;padding:12px;border-radius:12px;background:#f5b400;color:#222;font-weight:700}.plusgo:disabled{opacity:.6}
 .plusbadge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:99px;background:#ffe9a8;color:#7a4b00;font-size:11px;font-weight:700}
 .plusbox .price{font-size:22px;margin:0 0 6px}
+.help{text-decoration:none;font-size:13px}
+.authhelp{justify-content:center;align-self:center}
